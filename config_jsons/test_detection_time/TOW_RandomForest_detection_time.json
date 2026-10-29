@@ -11,8 +11,8 @@
             "sum_x": true
         },
         "load_paths": {
-            "X_path": "/content/automotive-ids-evaluation-framework/sample_inputs/sample_input_sum_aggregated.npz",
-            "y_path": "/content/automotive-ids-evaluation-framework/sample_inputs/sample_label_one_class_tow.csv"
+            "X_path": "sample_inputs/sample_input_sum_aggregated.npz",
+            "y_path": "sample_inputs/sample_label_one_class_tow.csv"
         }
     },
     "model_specs": {
@@ -31,11 +31,11 @@
             "models_output_path":"/content/models"
         },
         "presaved_paths": {
-            "0": "/content/automotive-ids-evaluation-framework/trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_0.pkl",
-            "1": "/content/automotive-ids-evaluation-framework/trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_1.pkl",
-            "2": "/content/automotive-ids-evaluation-framework/trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_2.pkl",
-            "3": "/content/automotive-ids-evaluation-framework/trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_3.pkl",
-            "4": "/content/automotive-ids-evaluation-framework/trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_4.pkl"
+            "0": "trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_0.pkl",
+            "1": "trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_1.pkl",
+            "2": "trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_2.pkl",
+            "3": "trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_3.pkl",
+            "4": "trained_models/TOW/first_stage/TOW_RandomForestClassifier_fold_4.pkl"
         }
     }
 }

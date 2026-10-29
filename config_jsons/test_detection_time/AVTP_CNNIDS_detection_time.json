@@ -10,8 +10,8 @@
             "dataset": "AVTP_Intrusion_dataset"
         },
         "load_paths": {
-            "X_path": "/content/automotive-ids-evaluation-framework/sample_inputs/sample_input_network_traffic_imaging.npz",
-            "y_path": "/content/automotive-ids-evaluation-framework/sample_inputs/sample_label_one_class_avtp_rounded.npz"
+            "X_path": "sample_inputs/sample_input_network_traffic_imaging.npz",
+            "y_path": "sample_inputs/sample_label_one_class_avtp_rounded.npz"
         }
     },
     "model_specs": {
