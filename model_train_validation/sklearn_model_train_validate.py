@@ -30,8 +30,9 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_sklearn_train_val"
         self._hyperparameters_grid = model_config_dict.get("hyperparams_grid", None)
 
+        # Output dir comes from IDS_ARTIFACTS_DIR (default: ./artifacts)
         # TODO: Get this from json config file
-        art_path = "/home/lfml/workspace/artifacts"
+        art_path = os.environ.get("IDS_ARTIFACTS_DIR", "artifacts")
         self._artifacts_path = f"{art_path}/{self._run_id}"
 
         if not os.path.exists(self._artifacts_path):
