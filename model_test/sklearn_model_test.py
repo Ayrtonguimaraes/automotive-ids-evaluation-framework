@@ -89,8 +89,9 @@ class SklearnModelTest(abstract_model_test.AbstractModelTest):
         self.__seed_all(0)
 
         # Get item from train data
-        X_test_full = [item[0] for item in data]
-        y_test_full = [item[1] for item in data]
+        # Boolean mask indexing below needs numpy arrays (not lists) and 1-D labels
+        X_test_full = np.array([item[0] for item in data])
+        y_test_full = np.array([item[1] for item in data]).ravel()
 
         unique_y_values = np.unique(y_test_full)
         # 0 is equal to the normal label, > 0 is equal to attack (in TOW-IDS)
