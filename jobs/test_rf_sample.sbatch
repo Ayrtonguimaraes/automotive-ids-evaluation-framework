@@ -10,13 +10,12 @@
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
-# Batch jobs start with a clean shell: load conda and the project environment again
-module load miniforge3/2025.07
-eval "$(conda shell.bash hook)"
-conda activate ids-env
+# Compute nodes do not have the miniforge3 module (only the login nodes do),
+# so call the environment's python directly; $HOME is shared by all nodes
+PYTHON="$HOME/.conda/envs/ids-env/bin/python"
 
 # Config paths are relative to the repository root
 cd "$HOME/automotive-ids"
 export IDS_ARTIFACTS_DIR="$HOME/outputs"
 
-python execute_model_test.py --model_test_config config_jsons/test_detection_time/AVTP_RandomForest_detection_time.json
+$PYTHON execute_model_test.py --model_test_config config_jsons/test_detection_time/AVTP_RandomForest_detection_time.json
