@@ -3,3 +3,5 @@ venv/
 artifacts/
 logs/
 /data
+.claude/
+docs/caderno.md
