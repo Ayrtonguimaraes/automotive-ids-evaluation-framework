@@ -135,7 +135,10 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         # metrics_df = pd.DataFrame(self._metrics_list, columns=["step", "fold", "acc", "f1", "prec", "recall", "roc_auc", "inference_time", "model_size"])
         # metrics_df.to_csv(f"{self._metrics_output_path}/train_val_metrics_{self._model_name}.csv")
 
-        # Used to generate a model for each fold
+        # Labels saved with shape (N, 1) must be flattened, otherwise argmax(1) below turns them all into 0
+        if y.ndim == 2 and y.shape[1] == 1:
+            y = y.ravel()
+
         # TODO: Find a better way to do this validation
         # This is to check if y has more than one dimension, for the multiclass case to work with skf.split
         try:
@@ -143,54 +146,30 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         except:
             pass
 
-        fold = None
+        # Train one model per fold, as in the paper's protocol (the test step loads the 5 fold models)
+        for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+            print('------------fold no---------{}----------------------'.format(fold))
 
-        # Train the model
-        self._model.train(X, y)
+            X_train, y_train = X[train_idx], y[train_idx]
+            X_val, y_val = X[val_idx], y[val_idx]
 
-        # Get the train metrics
-        train_metrics = self.__validate_model(X, y)
-        train_metrics = ["train", fold, *train_metrics]
+            self._model.train(X_train, y_train)
 
-        # Append the metrics to be further exported
-        self._metrics_list.append(train_metrics)
+            train_metrics = self.__validate_model(X_train, y_train)
+            self._metrics_list.append(["train", fold, *train_metrics])
+            val_metrics = self.__validate_model(X_val, y_val)
+            self._metrics_list.append(["validation", fold, *val_metrics])
 
-        # Export the current fold model
-        model_filename = f"{self._model_name}_entire_dataset_.pkl"
-        with open(f"{self._models_output_path}/{model_filename}", "wb") as file:
-            pickle.dump(self._model, file)
+            # Out-of-fold attack probabilities, used to choose the cascade thresholds without touching the test set
+            np.savez(f"{self._metrics_output_path}/oof_proba_{self._model_name}_fold_{fold}.npz",
+                     index=val_idx, y_true=y_val, proba=self._model.predict_proba(X_val))
 
-        # for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
-        #     print('------------fold no---------{}----------------------'.format(fold))
+            model_filename = f"{self._model_name}_fold_{fold}.pkl"
+            with open(f"{self._models_output_path}/{model_filename}", "wb") as file:
+                pickle.dump(self._model, file)
 
-        #     # Select the train data
-        #     X_train = X[train_idx]
-        #     y_train = y[train_idx]
+            self._model.reset()
 
-        #     # Select the test data
-        #     X_test = X[test_idx]
-        #     y_test = y[test_idx]
-
-        #     # Train the model
-        #     self._model.train(X_train, y_train)
-
-        #     # Get the train metrics
-        #     train_metrics = self.__validate_model(X_train, y_train)
-        #     train_metrics = ["train", fold, *train_metrics]
-
-        #     # Test (validate) the model
-        #     test_metrics = self.__validate_model(X_test, y_test)
-        #     test_metrics = ["validation", fold, *test_metrics]
-
-        #     # Append the metrics to be further exported
-        #     self._metrics_list.append(train_metrics)
-        #     self._metrics_list.append(test_metrics)
-        #     # Export the current fold model
-        #     model_filename = f"{self._model_name}_fold_{fold}.pkl"
-        #     with open(f"{self._models_output_path}/{model_filename}", "wb") as file:
-        #         pickle.dump(self._model, file)
-
-        #     self._model.reset()
-
-        metrics_df = pd.DataFrame(self._metrics_list, columns=["step", "fold", "acc", "f1", "prec", "recall", "roc_auc", "inference_time"])
-        metrics_df.to_csv(f"{self._metrics_output_path}/train_val_metrics_{self._model_name}.csv")
+            # Export after every fold so a preempted job keeps the finished folds
+            metrics_df = pd.DataFrame(self._metrics_list, columns=["step", "fold", "acc", "f1", "prec", "recall", "roc_auc", "inference_time"])
+            metrics_df.to_csv(f"{self._metrics_output_path}/train_val_metrics_{self._model_name}.csv")
