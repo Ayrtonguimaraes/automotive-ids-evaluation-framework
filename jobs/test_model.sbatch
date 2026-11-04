@@ -24,6 +24,8 @@ PYTHON="$HOME/.conda/envs/ids-env/bin/python"
 # Config paths are relative to the repository root
 cd "$HOME/automotive-ids"
 export IDS_ARTIFACTS_DIR="$HOME/outputs"
+# Without this, python buffers its output when writing to a file and the log stays empty until the end
+export PYTHONUNBUFFERED=1
 
 nvidia-smi --query-gpu=name,memory.total --format=csv 2>/dev/null || echo "no GPU in this job"
 echo "config: $CONFIG"

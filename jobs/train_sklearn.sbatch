@@ -23,6 +23,8 @@ PYTHON="$HOME/.conda/envs/ids-env/bin/python"
 # Config paths are relative to the repository root
 cd "$HOME/automotive-ids"
 export IDS_ARTIFACTS_DIR="$HOME/outputs"
+# Without this, python buffers its output when writing to a file and the log stays empty until the end
+export PYTHONUNBUFFERED=1
 
 echo "config: $CONFIG"
 /usr/bin/time -v $PYTHON execute_model_train_validation.py --model_train_valid_config "$CONFIG"
