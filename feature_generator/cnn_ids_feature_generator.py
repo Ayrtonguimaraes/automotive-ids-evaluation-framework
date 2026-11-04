@@ -5,8 +5,13 @@ import typing
 import time
 from scapy.all import *
 
+# Imported after the star import above, which also exports names called glob and re
+import glob
+import re
+
 from . import abstract_feature_generator
 from . import labeling_schemas
+from . import safe_pickle
 
 from sklearn.preprocessing import OneHotEncoder
 
@@ -17,9 +22,11 @@ AVTP_PACKETS_LENGHT = 438
 DEFAULT_LABELING_SCHEMA = "AVTP_Intrusion_dataset"
 DEFAULT_DATASET = "AVTP_Intrusion"
 DEFAULT_SUM_X = False
+DEFAULT_TRAIN_FRACTION = 0.7
 
 LABELING_SCHEMA_FACTORY = {
     "AVTP_Intrusion_dataset": labeling_schemas.avtp_intrusion_labeling_schema,
+    "SOMEIP_dataset": labeling_schemas.someip_labeling_schema,
     "TOW_IDS_dataset_one_class": labeling_schemas.tow_ids_one_class_labeling_schema,
     "TOW_IDS_dataset_multi_class": labeling_schemas.tow_ids_multi_class_labeling_schema
 }
@@ -34,6 +41,10 @@ class CNNIDSFeatureGenerator(abstract_feature_generator.AbstractFeatureGenerator
         self._sum_x = config.get('sum_x', DEFAULT_SUM_X)
         self._data_suffix = config.get('suffix')
 
+        # SOME/IP only: which captures to use ("train" or "test") and the fraction of captures used for training
+        self._split = config.get('split')
+        self._train_fraction = config.get('train_fraction', DEFAULT_TRAIN_FRACTION)
+
         self._multiclass = config.get('multiclass', False)
 
         self._dataset = config.get('dataset', DEFAULT_DATASET)
@@ -46,13 +57,52 @@ class CNNIDSFeatureGenerator(abstract_feature_generator.AbstractFeatureGenerator
     def generate_features(self, paths_dictionary: typing.Dict):
         CNN_IDS_FEAT_GEN_AVAILABLE_DATASETS = {
             "AVTP_Intrusion_dataset": self.__avtp_dataset_generate_features,
-            "TOW_IDS_dataset": self.__tow_ids_dataset_generate_features
+            "TOW_IDS_dataset": self.__tow_ids_dataset_generate_features,
+            "SOMEIP_dataset": self.__someip_dataset_generate_features
         }
 
         if self._dataset not in CNN_IDS_FEAT_GEN_AVAILABLE_DATASETS:
             raise KeyError(f"Selected dataset: {self._dataset} is NOT available for CNN IDS Feature Generator!")
 
         feature_generator = CNN_IDS_FEAT_GEN_AVAILABLE_DATASETS[self._dataset](paths_dictionary)
+
+    @staticmethod
+    def __someip_capture_index(x_path):
+        return int(re.search(r'_(\d+)_x\.pickle$', x_path).group(1))
+
+    def __someip_dataset_generate_features(self, paths_dictionary: typing.Dict):
+        # Each attack folder holds captures stored as <name>_<i>_x.pickle (N messages x 58 bytes: Ethernet, IPv4, UDP
+        # and SOME/IP headers) and <name>_<i>_y.pickle (N labels, 1 = attack). The dataset has no official split,
+        # so whole captures go to either train or test (the first train_fraction of each folder to train): this way no
+        # capture contributes to both sets, and windows never mix messages from different captures.
+        if self._split not in ("train", "test"):
+            raise ValueError("The SOME/IP feature generator needs the config 'split' set to 'train' or 'test'")
+
+        X_list, y_list = [], []
+        for attack_dir in sorted(glob.glob(f"{paths_dictionary['dataset_path']}/*/")):
+            x_paths = sorted(glob.glob(f"{attack_dir}*_x.pickle"), key=self.__someip_capture_index)
+            n_train = int(len(x_paths) * self._train_fraction)
+            selected_paths = x_paths[:n_train] if self._split == "train" else x_paths[n_train:]
+            print(f">> {attack_dir}: {len(selected_paths)} of {len(x_paths)} captures go to {self._split}")
+
+            for x_path in selected_paths:
+                packets = safe_pickle.safe_load(x_path).astype('uint8')
+                labels = np.asarray(safe_pickle.safe_load(x_path.replace('_x.pickle', '_y.pickle'))).ravel()
+
+                preprocessed_packets = self.__preprocess_raw_packets(packets, split_into_nibbles=True)
+                aggregated_X, aggregated_y = self.__aggregate_based_on_window_size(preprocessed_packets, labels)
+                if len(aggregated_y) == 0:
+                    continue
+
+                X_list.append(aggregated_X)
+                y_list.append(np.array(aggregated_y, dtype='uint8'))
+
+        X = np.concatenate(X_list, axis=0)
+        y = np.concatenate(y_list, axis=0)
+        print(f">> {self._split}: {len(y)} windows, {int(y.sum())} attack windows ({100 * y.mean():.2f}%)")
+
+        np.savez(f"{paths_dictionary['output_path']}/X_{self._data_suffix}_{self._output_path_suffix}", X)
+        np.savez(f"{paths_dictionary['output_path']}/y_{self._data_suffix}_{self._output_path_suffix}", y)
 
     def __tow_ids_dataset_generate_features(self, paths_dictionary: typing.Dict):
         # Load raw packets

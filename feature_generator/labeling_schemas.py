@@ -15,6 +15,11 @@ def avtp_intrusion_labeling_schema(y_sequence):
 
     return seq_y
 
+def someip_labeling_schema(y_sequence):
+    # Expects y_sequence as a list or array with one 0/1 label per message
+    # Labeling schema: same as the AVTP one, if there is an attack in the sequence, the sequence is considered as an attack
+    return avtp_intrusion_labeling_schema(y_sequence)
+
 def tow_ids_one_class_labeling_schema(y_sequence):
     # Expects y_sequence as a dataframe containing ["Class", "Description"] columns
     # Labeling schema: if there is an attack in the sequence, the sequence is considered as an attack

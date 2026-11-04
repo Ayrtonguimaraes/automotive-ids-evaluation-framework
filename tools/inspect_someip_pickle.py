@@ -1,38 +1,22 @@
 """Safely inspect one capture of the SOME/IP dataset (a *_x.pickle / *_y.pickle pair).
 
-Pickle files can run arbitrary code when they are loaded, so this uses an unpickler
-that only allows the few numpy classes needed to rebuild arrays; anything else is
-blocked and reported.
+Pickle files can run arbitrary code when they are loaded, so this uses the restricted
+unpickler of feature_generator/safe_pickle.py (numpy arrays only; anything else is blocked).
 
 Usage: python tools/inspect_someip_pickle.py error_on_error_1_x.pickle error_on_error_1_y.pickle
 """
-import pickle
+import importlib.util
+import os
 import sys
 
 import numpy as np
 
-ALLOWED = {
-    ("numpy", "ndarray"),
-    ("numpy", "dtype"),
-    ("numpy.core.multiarray", "_reconstruct"),
-    ("numpy.core.multiarray", "scalar"),
-    ("numpy.core.numeric", "_frombuffer"),
-    ("numpy._core.multiarray", "_reconstruct"),
-    ("numpy._core.multiarray", "scalar"),
-    ("numpy._core.numeric", "_frombuffer"),
-}
-
-
-class SafeUnpickler(pickle.Unpickler):
-    def find_class(self, module, name):
-        if (module, name) in ALLOWED:
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(f"blocked: {module}.{name}")
-
-
-def safe_load(path):
-    with open(path, "rb") as pickle_file:
-        return SafeUnpickler(pickle_file).load()
+# Load feature_generator/safe_pickle.py by path, so the heavy feature generator package is not imported
+_spec = importlib.util.spec_from_file_location(
+    "safe_pickle", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "feature_generator", "safe_pickle.py"))
+_safe_pickle = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_safe_pickle)
+safe_load = _safe_pickle.safe_load
 
 
 def describe_row(row):
