@@ -81,6 +81,10 @@ class SklearnModelTest(abstract_model_test.AbstractModelTest):
         self._confusion_matrix = conf_matrix
         self._roc_metrics = np.concatenate((fpr.reshape(-1, 1), tpr.reshape(-1, 1), thresholds.reshape(-1, 1)), axis=1)
 
+        # Per-sample attack probabilities, reused by analyses such as the cascade
+        self._test_proba = y_pred_prob
+        self._test_true = y_true
+
         return [acc, f1, prec, recall, roc_auc, inference_time]
 
 
@@ -128,3 +132,5 @@ class SklearnModelTest(abstract_model_test.AbstractModelTest):
                 confusion_matrix_df.to_csv(f"{self._metrics_output_path}/{attack_suffix}_confusion_matrix_{self._labeling_schema}_fold_{fold_index}_{self._model_name}.csv")
                 roc_metrics_df = pd.DataFrame(self._roc_metrics, columns=["fpr", "tpr", "thresholds"])
                 roc_metrics_df.to_csv(f"{self._metrics_output_path}/{attack_suffix}_roc_metrics_{self._labeling_schema}_fold_{fold_index}_{self._model_name}.csv")
+                np.savez(f"{self._metrics_output_path}/{attack_suffix}_test_proba_{self._labeling_schema}_fold_{fold_index}_{self._model_name}.npz",
+                         proba=self._test_proba, y_true=self._test_true)

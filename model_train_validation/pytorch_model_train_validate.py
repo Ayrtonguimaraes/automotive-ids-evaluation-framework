@@ -43,7 +43,9 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         self._evaluation_metrics = []
         self._train_validation_losses = []
 
-        self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_pytorch_train"
+        # IDS_FOLD trains a single fold per job; keep it in the run id so parallel jobs do not share a folder
+        fold_suffix = f"_fold{os.environ['IDS_FOLD']}" if os.environ.get("IDS_FOLD") else ""
+        self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_pytorch_train{fold_suffix}"
         # Output dir comes from IDS_ARTIFACTS_DIR (default: ./artifacts)
         # TODO: Get this from json config file
         art_path = os.environ.get("IDS_ARTIFACTS_DIR", "artifacts")
@@ -290,11 +292,29 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
             self._evaluation_metrics.append([fold, acc, prec, recall, f1, roc_auc, inference_time, model_size])
 
 
+    def __save_oof_predictions(self, train_data, val_idx, y, fold, collate_fn):
+        """Save the predictions for the validation fold, in the order of val_idx (out-of-fold)"""
+        self._model.eval()
+
+        loader = torch.utils.data.DataLoader(
+                    torch.utils.data.Subset(train_data, val_idx),
+                    batch_size=self._batch_size,
+                    shuffle=False,
+                    collate_fn=collate_fn)
+
+        probas = []
+        with torch.no_grad():
+            for data, _ in loader:
+                probas.append(self._model(data.float()).detach().cpu().numpy())
+
+        np.savez(f"{self._metrics_output_path}/oof_proba_{self._model_name}_fold_{fold}.npz",
+                 index=np.asarray(val_idx), y_true=np.asarray(y)[val_idx], proba=np.concatenate(probas))
+
     def execute(self, train_data):
         def collate_gpu(batch):
+            # Moves each batch to the selected device (cuda:0 unless IDS_DEVICE=cpu or no GPU is available)
             x, t = torch.utils.data.dataloader.default_collate(batch)
-            return x.to(device="cuda:0"), t.to(device="cuda:0")
-            # return x.to(device="cpu"), t.to(device="cpu")
+            return x.to(device=device), t.to(device=device)
 
         # Reset all seed to ensure reproducibility
         self.__seed_all(0)
@@ -302,8 +322,8 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         g.manual_seed(42)
 
         # Use gpu to train as preference
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        # device = torch.device("cpu")
+        use_cuda = torch.cuda.is_available() and os.environ.get("IDS_DEVICE", "cuda") != "cpu"
+        device = torch.device("cuda:0" if use_cuda else "cpu")
 
         # Get this criterion from configuration parameter
         criterion = None
@@ -328,7 +348,12 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
             pass
 
         # UNCOMENT THIS PART TO TRAIN USING STRATIFIED KFOLD
+        # IDS_FOLD=<n> trains only fold n (one job per fold); the splits are the same in every job
+        only_fold = os.environ.get("IDS_FOLD")
         for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+            if only_fold is not None and fold != int(only_fold):
+                continue
+
             print('------------fold no---------{}----------------------'.format(fold))
 
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_idx)
@@ -366,6 +391,7 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
                 self._train_validation_losses.append([fold, epoch, train_loss, val_loss])
 
             self.__test_model(criterion, device, testloader, fold)
+            self.__save_oof_predictions(train_data, test_idx, y, fold, collate_gpu)
 
             # Reset early stopping for next fold
             self.__reset_early_stopping()

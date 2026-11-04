@@ -223,6 +223,10 @@ class PytorchModelTest(abstract_model_test.AbstractModelTest):
             # TODO: Change this to be only used in case model is random forest
             # model_size = storage.pytorch_compute_model_size_mb(self._model)
 
+            # Keep the per-sample outputs so analyses (e.g. the cascade) can reuse them without rerunning the model
+            self._test_proba = y_pred.cpu().numpy()
+            self._test_true = y_true.cpu().numpy()
+
             # Append metrics on list
             self._evaluation_metrics.append([fold, acc, prec, recall, f1, roc_auc, inference_time])
             self._confusion_matrix = confusion_matrix.cpu().numpy()
@@ -230,15 +234,17 @@ class PytorchModelTest(abstract_model_test.AbstractModelTest):
 
     def execute(self, data):
         def collate_gpu(batch):
+            # Moves each batch to the selected device (cuda:0 unless IDS_DEVICE=cpu or no GPU is available)
             x, t = torch.utils.data.dataloader.default_collate(batch)
-            return x.to(device="cuda:0"), t.to(device="cuda:0")
+            return x.to(device=device), t.to(device=device)
         # Reset all seed to ensure reproducibility
         self.__seed_all(0)
         g = torch.Generator()
         g.manual_seed(42)
 
         # Use gpu to train as preference
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        use_cuda = torch.cuda.is_available() and os.environ.get("IDS_DEVICE", "cuda") != "cpu"
+        device = torch.device("cuda:0" if use_cuda else "cpu")
         fold_index = None
 
         # for fold_index in self._presaved_models_state_dict.keys():
@@ -270,6 +276,8 @@ class PytorchModelTest(abstract_model_test.AbstractModelTest):
             metrics_df.to_csv(f"{self._metrics_output_path}/test_metrics_{self._labeling_schema}_{self._model_name}_BS{self._batch_size}_fold_{fold_index}.csv")
             confusion_matrix_df = pd.DataFrame(self._confusion_matrix)
             confusion_matrix_df.to_csv(f"{self._metrics_output_path}/confusion_matrix_{self._labeling_schema}_fold_{fold_index}_{self._model_name}.csv")
+            np.savez(f"{self._metrics_output_path}/test_proba_{self._labeling_schema}_{self._model_name}_fold_{fold_index}.npz",
+                     proba=self._test_proba, y_true=self._test_true)
 
             if self._number_of_outputs == 6:
                 tpr_df = pd.DataFrame(self._tpr_multiclass)
