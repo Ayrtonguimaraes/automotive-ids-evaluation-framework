@@ -6,3 +6,4 @@ logs/
 .claude/
 docs/caderno.md
 /retrained
+.DS_Store
