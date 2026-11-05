@@ -20,6 +20,12 @@ if [ -z "$CONFIG" ]; then
     exit 1
 fi
 
+# Each task trains one fold, so the job must be submitted as an array (the task id is the fold)
+if [ -z "$SLURM_ARRAY_TASK_ID" ]; then
+    echo "error: submit as an array, e.g. sbatch --array=0-4 jobs/train_cnn.sbatch <train config>" >&2
+    exit 1
+fi
+
 # Compute nodes do not have the miniforge3 module, so call the environment's python directly
 PYTHON="$HOME/.conda/envs/ids-env/bin/python"
 
