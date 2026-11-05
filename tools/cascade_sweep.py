@@ -81,8 +81,10 @@ def main():
     if not folds:
         raise SystemExit(f"no matching folds. RF folds: {sorted(rf_files)}, CNN folds: {sorted(cnn_files)}")
 
-    t_lows = [0.0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
-    t_highs = [0.5, 0.7, 0.9, 0.95, 0.99, 1.01]  # 1.01 = the RF never confirms an attack alone
+    # A shallow forest averages many trees, so its probabilities rarely get close to 0 or 1:
+    # the useful thresholds are in the middle of the range, and the grid is dense there
+    t_lows = [round(0.02 * i, 2) for i in range(31)]  # 0.00 to 0.60
+    t_highs = [round(0.5 + 0.05 * i, 2) for i in range(10)] + [0.99, 1.01]  # 1.01 = the RF never confirms an attack alone
 
     rows = []
     for fold in folds:
@@ -106,19 +108,30 @@ def main():
         print(f"fold {fold}: {len(y_rf)} windows done")
 
     header = "fold,t_low,t_high,frac_to_cnn,tp,fp,fn,tn,acc,prec,recall,f1,est_time_us"
-    np.savetxt(args.out, np.array(rows), delimiter=",", header=header, comments="", fmt="%.6g")
+    np.savetxt(args.out, np.array(rows), delimiter=",", header=header, comments="", fmt="%.10g")
     print(f"saved {len(rows)} rows to {args.out}")
 
-    # Fold-averaged summary of some reference points
+    # Fold-averaged summary. Columns of `table`: see `header` above
     table = np.array(rows)
-    print("\nmean over folds (t_low, t_high -> fraction sent to the CNN, recall, precision, F1, est. time us)")
-    for t_low, t_high, label in [(0.0, 1.01, "CNN alone"), (0.5, 0.5, "RF alone"),
-                                 (0.1, 1.01, "RF discards p<0.1"), (0.01, 1.01, "RF discards p<0.01"),
-                                 (0.1, 0.99, "two thresholds 0.1/0.99")]:
-        sel = table[(np.isclose(table[:, 1], t_low)) & (np.isclose(table[:, 2], t_high))]
-        if len(sel):
-            m = sel.mean(axis=0)
-            print(f"{label:>26}: to_cnn={m[3]:.3f} recall={m[10]:.4f} prec={m[9]:.4f} f1={m[11]:.4f} time={m[12]:.0f}")
+    pairs = sorted({(row[1], row[2]) for row in rows})
+    means = [(t_low, t_high, table[(table[:, 1] == t_low) & (table[:, 2] == t_high)].mean(axis=0)) for t_low, t_high in pairs]
+
+    def show(label, t_low, t_high, m):
+        print(f"{label:>22}: t_low={t_low:<5} t_high={t_high:<5} to_cnn={m[3]:.3f} "
+              f"recall={m[10]:.4f} prec={m[9]:.4f} f1={m[11]:.4f} fp={m[5]:.0f} fn={m[6]:.0f} time={m[12]:.0f}")
+
+    print("\nmean over folds, TEST set, descriptive only (do not choose the thresholds from this table)")
+    cnn_alone = next(m for t_low, t_high, m in means if t_low == 0.0 and t_high == 1.01)
+    rf_alone = next(m for t_low, t_high, m in means if t_low == 0.5 and t_high == 0.5)
+    show("CNN alone", 0.0, 1.01, cnn_alone)
+    show("RF alone", 0.5, 0.5, rf_alone)
+
+    # Cheapest cascade (least sent to the CNN) that stays within `gap` of the F1 of the CNN alone
+    for gap in [0.0, 0.0005, 0.001, 0.005, 0.01, 0.02]:
+        candidates = [item for item in means if item[2][11] >= cnn_alone[11] - gap]
+        if candidates:
+            t_low, t_high, m = min(candidates, key=lambda item: item[2][3])
+            show(f"F1 gap <= {gap}", t_low, t_high, m)
 
 
 if __name__ == "__main__":
