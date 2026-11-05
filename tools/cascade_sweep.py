@@ -6,7 +6,7 @@ Nothing is trained here: it reuses the per-window probabilities that the test ru
 Cascade rule, for the RF attack probability p of a window:
     p <  t_low   -> "normal"  (final, the CNN is not run)
     p >= t_high  -> "attack"  (final, the CNN is not run)
-    otherwise    -> the CNN decides (its attack probability >= 0.5 means attack)
+    otherwise    -> the CNN decides
 With t_high above 1 the RF can never confirm an attack alone, so every window that is not discarded
 as normal goes to the CNN. With t_low = 0 and t_high > 1 every window goes to the CNN (CNN alone).
 
@@ -16,8 +16,8 @@ must be chosen on the out-of-fold predictions of the training data, never here.
 Usage:
     python tools/cascade_sweep.py --rf-dir ~/outputs/<rf test run>/metrics \
         --cnn-dir ~/outputs/<cnn test run>/metrics --cnn-outputs 1 --out cascade_aeid.csv
-For the TOW-IDS multiclass CNN use --cnn-outputs 6 (the attack probability is 1 - P(Normal), and the
-classes are in alphabetical order, so Normal is column 4).
+For the TOW-IDS multiclass CNN use --cnn-outputs 6 (the class is the largest output, any class but
+Normal means attack, and the classes are in alphabetical order, so Normal is column 4).
 """
 import argparse
 import glob
@@ -45,12 +45,14 @@ def load_rf(path):
 
 
 def load_cnn(path, n_outputs):
+    """Return the CNN binary decision (1 = attack) and the binary labels of each window."""
     data = np.load(path)
     proba, y_true = data["proba"], data["y_true"]
     if n_outputs == 1:
-        return proba.reshape(-1).astype(np.float64), np.asarray(y_true).reshape(-1).astype(int)
-    # Multiclass: attack probability is everything that is not "Normal"
-    return 1.0 - proba[:, NORMAL_COLUMN_TOW].astype(np.float64), 1 - np.asarray(y_true)[:, NORMAL_COLUMN_TOW].astype(int)
+        return (proba.reshape(-1) >= 0.5).astype(int), np.asarray(y_true).reshape(-1).astype(int)
+    # Multiclass: the 6 outputs are independent sigmoids, so they do not sum to 1. The class is the
+    # largest output, the same rule as the confusion matrix, and any class but Normal means attack
+    return (np.argmax(proba, axis=1) != NORMAL_COLUMN_TOW).astype(int), 1 - np.asarray(y_true)[:, NORMAL_COLUMN_TOW].astype(int)
 
 
 def evaluate(y, pred):
@@ -89,12 +91,11 @@ def main():
     rows = []
     for fold in folds:
         p_rf, y_rf = load_rf(rf_files[fold])
-        p_cnn, y_cnn = load_cnn(cnn_files[fold], args.cnn_outputs)
+        cnn_attack, y_cnn = load_cnn(cnn_files[fold], args.cnn_outputs)
         if len(y_rf) != len(y_cnn) or not np.array_equal(y_rf, y_cnn):
             raise SystemExit(f"fold {fold}: RF and CNN do not describe the same windows "
                              f"({len(y_rf)} vs {len(y_cnn)} windows, labels equal: "
                              f"{len(y_rf) == len(y_cnn) and np.array_equal(y_rf, y_cnn)})")
-        cnn_attack = (p_cnn >= 0.5).astype(int)
         for t_low in t_lows:
             for t_high in t_highs:
                 if t_low > t_high:
