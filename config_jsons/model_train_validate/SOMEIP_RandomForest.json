@@ -20,11 +20,12 @@
         "model": "SklearnClassifier",
         "model_name": "RandomForestClassifier",
         "model_params": {
-            "n_estimators": 100,
-            "max_depth": 4,
-            "max_features": 3,
+            "n_estimators": 50,
+            "max_depth": 10,
+            "max_features": 10,
             "bootstrap": true,
             "random_state": 42
-        }
+        },
+        "validation_groups_path": "data/someip/processed/groups_train.npz"
     }
 }

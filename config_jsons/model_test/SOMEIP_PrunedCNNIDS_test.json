@@ -20,8 +20,8 @@
         "model_name": "PrunedCNNIDS",
         "criterion": "binary-cross-entropy",
         "hyperparameters": {
-            "batch_size": 64,
-            "learning_rate": 0.001,
+            "batch_size": 256,
+            "learning_rate": 0.0001,
             "num_epochs": 30,
             "early_stopping_patience": 5,
             "num_outputs": 1
