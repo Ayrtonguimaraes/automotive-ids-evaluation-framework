@@ -5,9 +5,15 @@ on the remaining captures (the folds of model_train_validation/splits.py with va
 so near-identical overlapping windows never sit on both sides. The test set is not touched here.
 
 The model is the same pipeline the authors use (StandardScaler + RandomForestClassifier, see
-models/sklearn_classifier.py). Candidates are ranked by the mean validation ROC-AUC, decided before
-looking at the results: it does not depend on the 0.5 threshold, and 62% of the windows are attacks,
-so accuracy alone would reward a model that calls everything an attack.
+models/sklearn_classifier.py), and the search follows Section 4.2 of the paper: the same three
+hyperparameters, in the same ranges (n_estimators 50-300, max_depth and max_features 3-10). A few
+candidates outside those ranges are added only to check whether a larger forest would help; they are
+reported, but they are not eligible, because the paper keeps the first stage small on purpose (speed).
+
+Selection rule, decided before looking at the results: highest mean validation ROC-AUC (it does not
+depend on the 0.5 threshold, and most windows are attacks, so accuracy alone would reward a model that
+calls everything an attack). Among candidates within TIE of the best, the cheapest one wins (fewest
+trees, then the shallowest), since the paper's main criterion for this stage is a short detection time.
 
 Usage (from the repository root, on the cluster; see jobs/tune_rf.sbatch):
     python tools/tune_rf.py --x <X_train ... sumX_True.npz> --y <y_train ... sumX_True.npz> \
@@ -31,14 +37,19 @@ _spec = importlib.util.spec_from_file_location(
 splits = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(splits)
 
-# Search space, fixed before running. The AEID/TOW values (depth 4, 3 features) are included as the baseline
+# Search space, fixed before running, inside the ranges of the paper. It contains the values of Table 3:
+# (100, 4, 3) for AEID and (200, 10, 7) for TOW-IDS
 GRID = {
-    "max_depth": [4, 8, 16, None],
-    "max_features": [3, 10, 30],
+    "n_estimators": [50, 100, 200, 300],
+    "max_depth": [4, 7, 10],
+    "max_features": [3, 7, 10],
 }
-FIXED = {"n_estimators": 100, "bootstrap": True, "random_state": 42}
+# Outside the paper's ranges: shown in the ranking, never selected
+EXTRA = [(100, 16, 10), (100, None, 10), (100, 10, 30)]
+FIXED = {"bootstrap": True, "random_state": 42}
+TIE = 0.002
 
-HEADER = "max_depth,max_features,fold,val_auc,val_f1,val_acc,val_prec,val_recall,train_auc,fit_seconds"
+HEADER = "n_estimators,max_depth,max_features,in_paper_ranges,fold,val_auc,val_f1,val_acc,val_prec,val_recall,train_auc,fit_seconds"
 
 
 def main():
@@ -62,11 +73,15 @@ def main():
     with open(out, "w") as fh:
         fh.write(HEADER + "\n")
 
+    candidates = [(c, True) for c in itertools.product(GRID["n_estimators"], GRID["max_depth"], GRID["max_features"])]
+    candidates += [(c, False) for c in EXTRA]
+
     results = {}
-    for depth, feats in itertools.product(GRID["max_depth"], GRID["max_features"]):
+    for (trees, depth, feats), in_ranges in candidates:
         for f, (tr, va) in enumerate(folds):
             model = Pipeline([("scaler", StandardScaler()),
-                              ("clf", RandomForestClassifier(max_depth=depth, max_features=feats, n_jobs=args.jobs, **FIXED))])
+                              ("clf", RandomForestClassifier(n_estimators=trees, max_depth=depth, max_features=feats,
+                                                             n_jobs=args.jobs, **FIXED))])
             start = time.time()
             model.fit(X[tr], y[tr])
             seconds = time.time() - start
@@ -77,22 +92,32 @@ def main():
             sample = np.random.default_rng(0).choice(tr, size=min(200_000, len(tr)), replace=False)
             train_auc = roc_auc_score(y[sample], model.predict_proba(X[sample])[:, 1])
 
-            row = [depth, feats, f, roc_auc_score(y[va], p_val), f1_score(y[va], pred), accuracy_score(y[va], pred),
-                   precision_score(y[va], pred, zero_division=0), recall_score(y[va], pred), train_auc, seconds]
+            row = [trees, depth, feats, int(in_ranges), f, roc_auc_score(y[va], p_val), f1_score(y[va], pred),
+                   accuracy_score(y[va], pred), precision_score(y[va], pred, zero_division=0), recall_score(y[va], pred),
+                   train_auc, seconds]
             with open(out, "a") as fh:
                 fh.write(",".join(str(v) for v in row) + "\n")
-            results.setdefault((depth, feats), []).append(row)
-            print(f"depth={depth} features={feats} fold={f}: val_auc={row[3]:.4f} val_f1={row[4]:.4f} "
+            results.setdefault((trees, depth, feats, in_ranges), []).append(row)
+            print(f"trees={trees} depth={depth} features={feats} fold={f}: val_auc={row[5]:.4f} val_f1={row[6]:.4f} "
                   f"train_auc={train_auc:.4f} ({seconds:.0f} s)")
 
-    print("\nmean over capture folds, sorted by validation AUC (selection rule)")
-    ranking = sorted(results.items(), key=lambda item: -np.mean([r[3] for r in item[1]]))
-    for (depth, feats), rows in ranking:
-        auc = [r[3] for r in rows]
-        print(f"depth={str(depth):>4} features={feats:>2}: val_auc={np.mean(auc):.4f} ± {np.std(auc):.4f} "
-              f"val_f1={np.mean([r[4] for r in rows]):.4f} train_auc={np.mean([r[8] for r in rows]):.4f}")
-    (depth, feats), _ = ranking[0]
-    print(f"\nselected: max_depth={depth}, max_features={feats}")
+    def mean_auc(rows):
+        return float(np.mean([r[5] for r in rows]))
+
+    print("\nmean over capture folds, sorted by validation AUC")
+    ranking = sorted(results.items(), key=lambda item: -mean_auc(item[1]))
+    for (trees, depth, feats, in_ranges), rows in ranking:
+        auc = [r[5] for r in rows]
+        print(f"trees={trees:>3} depth={str(depth):>4} features={feats:>2}: val_auc={np.mean(auc):.4f} ± {np.std(auc):.4f} "
+              f"val_f1={np.mean([r[6] for r in rows]):.4f} train_auc={np.mean([r[10] for r in rows]):.4f}"
+              f"{'' if in_ranges else '   (outside the paper ranges, not eligible)'}")
+
+    eligible = [(key, rows) for key, rows in ranking if key[3]]
+    best_auc = mean_auc(eligible[0][1])
+    tied = [key for key, rows in eligible if mean_auc(rows) >= best_auc - TIE]
+    trees, depth, feats, _ = min(tied, key=lambda key: (key[0], key[1], key[2]))
+    print(f"\nbest eligible validation AUC: {best_auc:.4f}; {len(tied)} candidate(s) within {TIE} of it")
+    print(f"selected (cheapest of those): n_estimators={trees}, max_depth={depth}, max_features={feats}")
 
 
 if __name__ == "__main__":
