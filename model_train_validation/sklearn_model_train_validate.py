@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 
 from . import abstract_model_train_validate
+from . import splits
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score
@@ -26,6 +27,7 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
     def __init__(self, model, model_config_dict: typing.Dict):
         self._model = model
         self._model_name = model_config_dict["model_name"]
+        self._model_config_dict = model_config_dict
         self._metrics_list = []
         self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_sklearn_train_val"
         self._hyperparameters_grid = model_config_dict.get("hyperparams_grid", None)
@@ -147,7 +149,8 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
             pass
 
         # Train one model per fold, as in the paper's protocol (the test step loads the 5 fold models)
-        for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+        # Same folds as the paper (StratifiedKFold) unless the config asks for validation by capture (see splits.py)
+        for fold, (train_idx, val_idx) in enumerate(splits.make_folds(y, self._model_config_dict)):
             print('------------fold no---------{}----------------------'.format(fold))
 
             X_train, y_train = X[train_idx], y[train_idx]

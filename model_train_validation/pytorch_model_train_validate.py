@@ -12,6 +12,7 @@ from torch import nn
 from sklearn.model_selection import StratifiedKFold
 
 from . import abstract_model_train_validate
+from . import splits
 from custom_metrics import timing, storage
 
 from torchmetrics.classification import (
@@ -350,7 +351,8 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         # UNCOMENT THIS PART TO TRAIN USING STRATIFIED KFOLD
         # IDS_FOLD=<n> trains only fold n (one job per fold); the splits are the same in every job
         only_fold = os.environ.get("IDS_FOLD")
-        for fold, (train_idx, test_idx) in enumerate(skf.split(X, y)):
+        # Same folds as the paper (StratifiedKFold) unless the config asks for validation by capture (see splits.py)
+        for fold, (train_idx, test_idx) in enumerate(splits.make_folds(y, self._model_specs_dict)):
             if only_fold is not None and fold != int(only_fold):
                 continue
 
