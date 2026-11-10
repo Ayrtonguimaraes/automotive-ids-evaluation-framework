@@ -2,7 +2,7 @@
 # Apuana job array: one SOME/IP CNN candidate per array task, all trained on fold 0 of the
 # validation by capture (config key "validation_groups_path"). Only training data is used.
 # Submit from the repository root (at most 2 tasks at a time, the GPU limit per user):
-#   sbatch --array=0-3%2 jobs/tune_cnn.sbatch
+#   sbatch --array=0-5%2 jobs/tune_cnn.sbatch
 # Task i trains the i-th file, in alphabetical order, of:
 #   config_jsons/model_train_validate/SOMEIP_PrunedCNNIDS_tune_*.json
 #SBATCH --job-name=tune_cnn
@@ -16,7 +16,7 @@
 #SBATCH --error=logs/%x_%A_%a.err
 
 if [ -z "$SLURM_ARRAY_TASK_ID" ]; then
-    echo "error: submit as an array, e.g. sbatch --array=0-3%2 jobs/tune_cnn.sbatch" >&2
+    echo "error: submit as an array, e.g. sbatch --array=0-5%2 jobs/tune_cnn.sbatch" >&2
     exit 1
 fi
 
