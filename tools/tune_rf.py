@@ -65,7 +65,7 @@ def main():
     X = np.load(args.x)["arr_0"]
     y = np.load(args.y)["arr_0"].ravel().astype(int)
     folds = splits.make_folds(y, {"validation_groups_path": args.groups})[:args.folds]
-    print(f"X {X.shape}, attack windows {y.mean():.4f}, using {len(folds)} capture folds")
+    print(f"X {X.shape}, attack windows {y.mean():.4f}, using {len(folds)} validation folds")
     for f, (tr, va) in enumerate(folds):
         print(f"  fold {f}: train {len(tr)} windows ({y[tr].mean():.3f} attack), val {len(va)} ({y[va].mean():.3f} attack)")
 
@@ -104,7 +104,7 @@ def main():
     def mean_auc(rows):
         return float(np.mean([r[5] for r in rows]))
 
-    print("\nmean over capture folds, sorted by validation AUC")
+    print("\nmean over the validation folds, sorted by validation AUC")
     ranking = sorted(results.items(), key=lambda item: -mean_auc(item[1]))
     for (trees, depth, feats, in_ranges), rows in ranking:
         auc = [r[5] for r in rows]
