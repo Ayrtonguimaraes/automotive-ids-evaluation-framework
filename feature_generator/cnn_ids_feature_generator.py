@@ -7,11 +7,13 @@ from scapy.all import *
 
 # Imported after the star import above, which also exports names called glob and re
 import glob
+import os
 import re
 
 from . import abstract_feature_generator
 from . import labeling_schemas
 from . import safe_pickle
+from . import someip_csv
 
 from sklearn.preprocessing import OneHotEncoder
 
@@ -58,7 +60,8 @@ class CNNIDSFeatureGenerator(abstract_feature_generator.AbstractFeatureGenerator
         CNN_IDS_FEAT_GEN_AVAILABLE_DATASETS = {
             "AVTP_Intrusion_dataset": self.__avtp_dataset_generate_features,
             "TOW_IDS_dataset": self.__tow_ids_dataset_generate_features,
-            "SOMEIP_dataset": self.__someip_dataset_generate_features
+            "SOMEIP_dataset": self.__someip_dataset_generate_features,
+            "SOMEIP_CSV_dataset": self.__someip_csv_dataset_generate_features
         }
 
         if self._dataset not in CNN_IDS_FEAT_GEN_AVAILABLE_DATASETS:
@@ -103,6 +106,45 @@ class CNNIDSFeatureGenerator(abstract_feature_generator.AbstractFeatureGenerator
 
         np.savez(f"{paths_dictionary['output_path']}/X_{self._data_suffix}_{self._output_path_suffix}", X)
         np.savez(f"{paths_dictionary['output_path']}/y_{self._data_suffix}_{self._output_path_suffix}", y)
+
+    def __someip_csv_dataset_generate_features(self, paths_dictionary: typing.Dict):
+        # SOME/IP dataset of Alkhatib et al. (2021), as published with the paper in github.com/Alkhatibnatasha/SOMEIP_IDS:
+        # one CSV per attack scenario in Data/Train and Data/Test (the official split), one row per message, in the
+        # order of the capture. The rows hold the header fields, not the raw bytes, so the 58 bytes the extractor
+        # expects are rebuilt from them (see someip_csv.py). Each file is processed on its own, so windows never mix
+        # two captures. The labels are 0 (normal) or the number of the attack; any non-zero label is an attack.
+        if self._split not in ("train", "test"):
+            raise ValueError("The SOME/IP CSV feature generator needs the config 'split' set to 'train' or 'test'")
+
+        csv_paths = sorted(glob.glob(f"{paths_dictionary['dataset_path']}/{self._split.capitalize()}/*.csv"))
+        if not csv_paths:
+            raise FileNotFoundError(f"no CSV files in {paths_dictionary['dataset_path']}/{self._split.capitalize()}")
+
+        X_list, y_list, file_list, pos_list = [], [], [], []
+        for file_index, csv_path in enumerate(csv_paths):
+            packets, labels = someip_csv.read_capture(csv_path)
+
+            preprocessed_packets = self.__preprocess_raw_packets(packets, split_into_nibbles=True)
+            aggregated_X, aggregated_y = self.__aggregate_based_on_window_size(preprocessed_packets, labels)
+            aggregated_y = np.array(aggregated_y, dtype='uint8')
+            print(f">> {os.path.basename(csv_path)}: {len(labels)} messages ({int(labels.sum())} attacks), "
+                  f"{len(aggregated_y)} windows ({100 * aggregated_y.mean():.2f}% attack)")
+
+            X_list.append(aggregated_X)
+            y_list.append(aggregated_y)
+            file_list.append(np.full(len(aggregated_y), file_index, dtype=np.int16))
+            pos_list.append(np.arange(len(aggregated_y), dtype=np.int32))
+
+        X = np.concatenate(X_list, axis=0)
+        y = np.concatenate(y_list, axis=0)
+        print(f">> {self._split}: {len(y)} windows, {int(y.sum())} attack windows ({100 * y.mean():.2f}%)")
+
+        np.savez(f"{paths_dictionary['output_path']}/X_{self._data_suffix}_{self._output_path_suffix}", X)
+        np.savez(f"{paths_dictionary['output_path']}/y_{self._data_suffix}_{self._output_path_suffix}", y)
+        # Which file each window comes from and its position there, for the purged block validation (splits.py)
+        np.savez(f"{paths_dictionary['output_path']}/groups_{self._split}.npz",
+                 file_id=np.concatenate(file_list), pos=np.concatenate(pos_list),
+                 names=np.array([os.path.basename(p) for p in csv_paths]))
 
     def __tow_ids_dataset_generate_features(self, paths_dictionary: typing.Dict):
         # Load raw packets
