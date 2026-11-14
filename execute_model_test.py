@@ -75,7 +75,11 @@ def main():
     if framework == "pytorch":
         num_outputs = model_specs_dict.get('hyperparameters').get('num_outputs', 1)
         num_ensemble_inputs = model_specs_dict.get('hyperparameters').get('ensemble_inputs', 2)
-        if model_name in ["CNNIDS", "PrunedCNNIDS", "MultiClassCNNIDS"]:
+        if model_name == "PrunedCNNIDS":
+            # The size of the first linear layer depends on the window size (44 in the paper)
+            model = AVAILABLE_IDS[model_name](number_of_outputs=num_outputs,
+                                              window_size=feat_gen_config_dict['config'].get('window_size', 44))
+        elif model_name in ["CNNIDS", "MultiClassCNNIDS"]:
             if num_outputs > 1:
                 model = AVAILABLE_IDS[model_name](number_of_outputs=num_outputs)
             else:

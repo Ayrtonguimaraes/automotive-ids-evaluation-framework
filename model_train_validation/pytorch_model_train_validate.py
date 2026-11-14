@@ -279,7 +279,8 @@ class PytorchModelTrainValidation(abstract_model_train_validate.AbstractModelTra
             recall = recall_score.compute().cpu().numpy()
 
             # TODO: Get the data format using the data
-            dummy_input = torch.randn(1, 1, 44, 116, dtype=torch.float).to(device)
+            rows, columns = getattr(self._model, "input_shape", (44, 116))
+            dummy_input = torch.randn(1, 1, rows, columns, dtype=torch.float).to(device)
             if device.type == "cpu":
                 timing_func = timing.pytorch_inference_time_cpu
             else:

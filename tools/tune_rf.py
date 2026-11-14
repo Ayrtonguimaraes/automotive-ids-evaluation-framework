@@ -60,6 +60,8 @@ def main():
     parser.add_argument("--folds", type=int, default=3, help="how many of the 5 capture folds to use (time budget)")
     parser.add_argument("--jobs", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "4")))
     parser.add_argument("--out", required=True)
+    parser.add_argument("--only", help="score a single candidate instead of the grid, as trees,depth,features "
+                                       "(used by the window search, which keeps the tuned values fixed)")
     args = parser.parse_args()
 
     X = np.load(args.x)["arr_0"]
@@ -75,6 +77,9 @@ def main():
 
     candidates = [(c, True) for c in itertools.product(GRID["n_estimators"], GRID["max_depth"], GRID["max_features"])]
     candidates += [(c, False) for c in EXTRA]
+    if args.only:
+        trees, depth, feats = (int(v) for v in args.only.split(","))
+        candidates = [((trees, depth, feats), True)]
 
     results = {}
     for (trees, depth, feats), in_ranges in candidates:

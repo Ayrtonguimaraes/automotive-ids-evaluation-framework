@@ -81,3 +81,14 @@ def read_capture(csv_path):
     # 0 is normal and 1-4 are the attack classes; the paper's IDS is binary, so any attack is 1
     labels = (frame["label"].to_numpy() != 0).astype(np.uint8)
     return packets, labels
+
+
+def conversation_keys(csv_path):
+    """Return one key per row of the CSV file: "<client IP>-<server IP>", the same for a request and its answer.
+
+    A conversation is everything a client and a server exchange (the pairs counted in the exploratory
+    analysis, where a window of 45 messages held 14 of them). The CSV has the client and the server of each
+    message in the columns client_ip and server_ip, whatever the direction of the message.
+    """
+    frame = pd.read_csv(csv_path)
+    return (frame["client_ip"].astype(str) + "-" + frame["server_ip"].astype(str)).to_numpy()

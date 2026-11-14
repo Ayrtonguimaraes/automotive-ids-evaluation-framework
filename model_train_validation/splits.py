@@ -14,18 +14,22 @@ validation optimistic. Two kinds of groups file are understood:
     one file per attack and so no capture to hold out): each file is cut into N_SPLITS contiguous
     blocks, fold k validates on block k of every file, and the training windows within PURGE
     positions of the validation block are dropped (purged k-fold), so no training window shares a
-    message with a validation window.
+    message with a validation window. PURGE is window_size + 1 when the file stores the window size.
+
+The SOME/IP CSV windows built per conversation use capture groups: "capture" is the conversation and
+"folder" the file, since windows of two conversations never share a message.
 """
 import numpy as np
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 N_SPLITS = 5
 RANDOM_STATE = 1
-# Windows i and j share a message when |i - j| <= 44 (a window spans 45 messages)
+# Windows i and j share a message when |i - j| <= 44 (a window of 44 differences spans 45 messages).
+# Groups files that store "window_size" use window_size + 1 instead.
 PURGE = 45
 
 
-def purged_block_folds(file_ids, pos):
+def purged_block_folds(file_ids, pos, purge=PURGE):
     folds = [([], []) for _ in range(N_SPLITS)]
     for f in np.unique(file_ids):
         idx = np.flatnonzero(file_ids == f)
@@ -33,7 +37,7 @@ def purged_block_folds(file_ids, pos):
         blocks = np.array_split(idx, N_SPLITS)
         for k, block in enumerate(blocks):
             lo, hi = pos[block].min(), pos[block].max()
-            keep = (pos[idx] < lo - PURGE + 1) | (pos[idx] > hi + PURGE - 1)
+            keep = (pos[idx] < lo - purge + 1) | (pos[idx] > hi + purge - 1)
             folds[k][0].append(idx[keep])
             folds[k][1].append(block)
     return [(np.sort(np.concatenate(tr)), np.sort(np.concatenate(va))) for tr, va in folds]
@@ -54,9 +58,10 @@ def make_folds(y, model_config_dict):
         file_ids, pos = groups["file_id"], groups["pos"]
         if len(file_ids) != n_samples:
             raise ValueError(f"{groups_path} describes {len(file_ids)} windows, but the data has {n_samples}")
-        folds = purged_block_folds(file_ids, pos)
+        purge = int(groups["window_size"]) + 1 if "window_size" in groups.files else PURGE
+        folds = purged_block_folds(file_ids, pos, purge)
         y = np.asarray(y).ravel()
-        print(f">> Validation by purged blocks: {len(np.unique(file_ids))} files from {groups_path}")
+        print(f">> Validation by purged blocks: {len(np.unique(file_ids))} files from {groups_path}, purge {purge}")
         for fold, (train_idx, val_idx) in enumerate(folds):
             print(f">> fold {fold}: train {len(train_idx)} windows ({y[train_idx].mean():.3f} attack), "
                   f"validation {len(val_idx)} ({y[val_idx].mean():.3f} attack), "

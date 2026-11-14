@@ -210,7 +210,8 @@ class PytorchModelTest(abstract_model_test.AbstractModelTest):
                 self._roc_metrics = roc_metrics.cpu().numpy()
 
             # TODO: Get the data format using the data
-            dummy_input = torch.randn(64, 1, 44, 116, dtype=torch.float).to(device)
+            rows, columns = getattr(self._model, "input_shape", (44, 116))
+            dummy_input = torch.randn(64, 1, rows, columns, dtype=torch.float).to(device)
             if device.type == "cpu":
                 print("detection time in cpu")
                 timing_func = timing.pytorch_inference_time_cpu

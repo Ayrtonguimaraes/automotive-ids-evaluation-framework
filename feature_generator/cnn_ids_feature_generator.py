@@ -46,6 +46,9 @@ class CNNIDSFeatureGenerator(abstract_feature_generator.AbstractFeatureGenerator
         # SOME/IP only: which captures to use ("train" or "test") and the fraction of captures used for training
         self._split = config.get('split')
         self._train_fraction = config.get('train_fraction', DEFAULT_TRAIN_FRACTION)
+        # SOME/IP CSV only: "arrival" builds the windows over the messages in the order they were captured
+        # (the paper's method); "conversation" builds them inside each client-server conversation
+        self._window_grouping = config.get('window_grouping', 'arrival')
 
         self._multiclass = config.get('multiclass', False)
 
@@ -120,31 +123,67 @@ class CNNIDSFeatureGenerator(abstract_feature_generator.AbstractFeatureGenerator
         if not csv_paths:
             raise FileNotFoundError(f"no CSV files in {paths_dictionary['dataset_path']}/{self._split.capitalize()}")
 
-        X_list, y_list, file_list, pos_list = [], [], [], []
+        if self._window_grouping not in ("arrival", "conversation"):
+            raise ValueError(f"window_grouping must be 'arrival' or 'conversation', not {self._window_grouping}")
+
+        X_list, y_list, file_list, pos_list, conversation_list = [], [], [], [], []
+        conversation_names = []
         for file_index, csv_path in enumerate(csv_paths):
             packets, labels = someip_csv.read_capture(csv_path)
 
-            preprocessed_packets = self.__preprocess_raw_packets(packets, split_into_nibbles=True)
-            aggregated_X, aggregated_y = self.__aggregate_based_on_window_size(preprocessed_packets, labels)
-            aggregated_y = np.array(aggregated_y, dtype='uint8')
-            print(f">> {os.path.basename(csv_path)}: {len(labels)} messages ({int(labels.sum())} attacks), "
-                  f"{len(aggregated_y)} windows ({100 * aggregated_y.mean():.2f}% attack)")
+            if self._window_grouping == "arrival":
+                # One sequence: the whole file, in capture order
+                sequences = [np.arange(len(labels))]
+            else:
+                # One sequence per conversation, each in capture order. A conversation shorter than the window
+                # gives no window, so its messages get no decision (reported below)
+                keys = someip_csv.conversation_keys(csv_path)
+                sequences = [np.flatnonzero(keys == key) for key in dict.fromkeys(keys)]
 
-            X_list.append(aggregated_X)
-            y_list.append(aggregated_y)
-            file_list.append(np.full(len(aggregated_y), file_index, dtype=np.int16))
-            pos_list.append(np.arange(len(aggregated_y), dtype=np.int32))
+            covered, file_windows = 0, 0
+            for rows in sequences:
+                preprocessed_packets = self.__preprocess_raw_packets(packets[rows], split_into_nibbles=True)
+                aggregated_X, aggregated_y = self.__aggregate_based_on_window_size(preprocessed_packets, labels[rows])
+                if len(aggregated_y) == 0:
+                    continue
+                covered += len(rows)
+                file_windows += len(aggregated_y)
+                X_list.append(aggregated_X)
+                y_list.append(np.array(aggregated_y, dtype='uint8'))
+                file_list.append(np.full(len(aggregated_y), file_index, dtype=np.int16))
+                # Position of the window inside its sequence (the first message it uses)
+                pos_list.append(np.arange(len(aggregated_y), dtype=np.int32))
+                conversation_list.append(np.full(len(aggregated_y), len(conversation_names), dtype=np.int32))
+                conversation_names.append(f"{os.path.basename(csv_path)}:{len(conversation_names)}")
+
+            print(f">> {os.path.basename(csv_path)}: {len(labels)} messages ({int(labels.sum())} attacks), "
+                  f"{len(sequences)} sequence(s), {covered} messages in a sequence long enough for a window, "
+                  f"{file_windows} windows")
 
         X = np.concatenate(X_list, axis=0)
         y = np.concatenate(y_list, axis=0)
-        print(f">> {self._split}: {len(y)} windows, {int(y.sum())} attack windows ({100 * y.mean():.2f}%)")
+        print(f">> {self._split} ({self._window_grouping}, window {self._window_size}): {len(y)} windows, "
+              f"{int(y.sum())} attack windows ({100 * y.mean():.2f}%), {int((y == 0).sum())} normal")
 
         np.savez(f"{paths_dictionary['output_path']}/X_{self._data_suffix}_{self._output_path_suffix}", X)
         np.savez(f"{paths_dictionary['output_path']}/y_{self._data_suffix}_{self._output_path_suffix}", y)
-        # Which file each window comes from and its position there, for the purged block validation (splits.py)
-        np.savez(f"{paths_dictionary['output_path']}/groups_{self._split}.npz",
-                 file_id=np.concatenate(file_list), pos=np.concatenate(pos_list),
-                 names=np.array([os.path.basename(p) for p in csv_paths]))
+        file_ids = np.concatenate(file_list)
+        names = np.array([os.path.basename(p) for p in csv_paths])
+        # Groups for the validation without shared messages (splits.py)
+        if self._window_grouping == "arrival":
+            # Which file each window comes from and its position there, for the purged block validation; a
+            # window of w differences uses w + 1 messages, so the purge distance follows the window size
+            np.savez(f"{paths_dictionary['output_path']}/groups_{self._split}.npz",
+                     file_id=file_ids, pos=np.concatenate(pos_list), names=names,
+                     window_size=np.array(self._window_size))
+        else:
+            # Windows of different conversations never share a message, so whole conversations go to one
+            # fold (like whole captures in the pickles), stratified by file (one file per attack)
+            np.savez(f"{paths_dictionary['output_path']}/groups_{self._split}.npz",
+                     capture=np.concatenate(conversation_list), folder=file_ids,
+                     names=np.array(conversation_names))
+
+
 
     def __tow_ids_dataset_generate_features(self, paths_dictionary: typing.Dict):
         # Load raw packets
