@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Introduction](#introduction)
+- [Reprodução e extensões (CIN0114)](#cin0114)
 - [Getting started](#getting-started)
     - [Executing the feature generator script](#feat-gen)
     - [Executing the model training and validation script](#train-val)
@@ -25,6 +26,79 @@ This repository currently contains the code to reproduce the following work:
 
 - [Multi-Stage Deep Learning-Based Intrusion Detection System for Automotive Ethernet Network](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4658006)
 - [Convolutional neural network-based intrusion detection system for AVTP streams in automotive Ethernet-based networks](https://www.sciencedirect.com/science/article/abs/pii/S2214209621000073)
+
+<a name="cin0114"> </a>
+## Reprodução e extensões (CIN0114 – 2026.2)
+
+Esta seção descreve o trabalho feito sobre o código dos autores na disciplina CIN0114 (CIn/UFPE):
+a reprodução do artigo com todos os modelos retreinados, a avaliação em um terceiro conjunto de
+dados (SOME/IP) e duas modificações. O relatório explica as decisões e os resultados; aqui está
+como executar cada experimento. Todos os scripts novos começam com um comentário que explica o
+que fazem, quais dados usam e como rodá-los.
+
+### Ambiente
+
+- Cluster Slurm (Apuana, CIn/UFPE), Python 3.10, `requirements.txt` (torch 2.0.1, scikit-learn 1.2.2).
+- Os jobs ficam em `jobs/` e rodam a partir da raiz do repositório (`sbatch jobs/<job>.sbatch ...`).
+  Saídas em `$IDS_ARTIFACTS_DIR` (padrão `~/outputs`), uma pasta por execução; logs em `logs/`.
+- Dados em `data/` (link para a pasta de dados, fora do git): `data/aeid`, `data/tow`,
+  `data/someip` (pickles) e `data/someip_csv/Data` (CSV do repositório `Alkhatibnatasha/SOMEIP_IDS`).
+
+### Mudanças no código dos autores
+
+| Arquivo | Mudança | Por quê |
+|---|---|---|
+| `model_train_validation/*.py`, `model_test/*.py` | pasta de saída por `IDS_ARTIFACTS_DIR` e nome da variante por `IDS_RUN_TAG` | o caminho era fixo na máquina dos autores; jobs simultâneos não podem dividir a pasta |
+| `model_train_validation/sklearn_model_train_validate.py` | treina os 5 folds (estava comentado); grava as predições fora-do-fold; aceita pesos por janela (`sample_weights_path`) | protocolo do artigo; cascata e retreino |
+| `model_train_validation/pytorch_model_train_validate.py` | um fold por job (`IDS_FOLD`); grava as predições fora-do-fold | GPUs limitadas; retreino |
+| `model_train_validation/splits.py` | folds sem vazamento quando o config tem `validation_groups_path` (por captura, por blocos com purga ou por conversa); sem ele, os folds do artigo | janelas sobrepostas vazam entre treino e validação |
+| `model_test/*.py` | grava a probabilidade de cada janela de teste; dispositivo por `IDS_DEVICE` | figuras, análises e tempo em CPU |
+| `feature_generator/cnn_ids_feature_generator.py`, `someip_csv.py` | leitores do SOME/IP (pickles e CSV, com os 58 bytes reconstruídos) e janela por conversa (`window_grouping`) | terceiro conjunto e modificação M1 |
+| `models/pruned_conv_net_ids.py` | a camada densa é calculada pelo tamanho da janela (8294 para 44) | modificação M1 |
+
+Os resultados do AEID e do TOW-IDS usam os folds e os hiperparâmetros do artigo.
+
+### Experimentos e jobs, em ordem
+
+**1. Reprodução (AEID e TOW-IDS).**
+`feature_gen.sbatch` com os configs `config_jsons/feat_generator/AEID_*` e `TOW_*`;
+`train_sklearn.sbatch` e `train_cnn.sbatch` (array de 5 folds) com `AEID_RandomForest`,
+`AEID_PrunedCNNIDS`, `TOW_RandomForest`, `TOW_PrunedCNNIDS_Multiclass`; `tools/link_cnn_folds.py`
+liga os modelos em `retrained/`; `test_model.sbatch` com os configs de `config_jsons/model_test/`.
+Tempo em CPU: `time_cpu.sbatch` (8 modelos no mesmo job; `sbatch -c 1` para um núcleo).
+Diagnóstico do CAN Replay (Tabela 9): `diagnose_can_replay.sbatch`.
+Métrica multiclasse do TOW-IDS: `check_multiclass_metrics.sbatch`.
+
+**2. SOME/IP (terceiro conjunto).** Configs `SOMEIP_*` (pickles) e `SOMEIPCSV_*` (CSV, versão principal).
+Grupos para a validação dos pickles: `someip_groups.sbatch`. Tunagem: `tune_rf.sbatch` e
+`tune_cnn.sbatch` (resumo: `tools/summarize_cnn_tuning.py`). Treino final e teste único:
+`final_someip_rf.sbatch` e `final_someip_cnn_test.sbatch`. Métricas balanceadas: `tools/binary_report.py`.
+Análises exploratórias: `explore_someip.sbatch`, `explore_someip_labels.sbatch`.
+
+**3. Modificação M1 – janela por conversa (SOME/IP CSV).**
+`python tools/make_window_search_configs.py` escreve os configs; `sbatch --array=0-7%2 jobs/window_search.sbatch`
+roda as 8 variantes (ordem de chegada e conversa, janelas de 10, 20, 30 e 44) só no treino;
+`tools/summarize_window_search.py` aplica a regra de escolha; `window_search_test.sbatch conversation_w10`
+faz o teste único; `message_level_eval.sbatch` compara as duas janelas por mensagem, com bootstrap.
+
+**4. Modificação M2 – retreino do RF guiado pela CNN (TOW-IDS).**
+`feedback_weights.sbatch` (pesos a partir das predições fora-do-fold; as pastas de treino de origem
+estão no próprio job e foram identificadas com `tools/list_oof.py`); `sbatch --array=0-5%4 jobs/feedback_search.sbatch`
+(retreino e controle com pesos 2, 5 e 10); `tools/feedback_loop.py summarize` (validação e escolha);
+`feedback_test.sbatch feedback_w5` e `feedback_test.sbatch control_w5` (teste único).
+
+**5. Figuras e tabelas do relatório.** `report_figures.sbatch` recria as Figs. 8 e 9 do artigo com os
+nossos modelos e gera as figuras das modificações (`~/outputs/report_figures`).
+
+### Principais resultados (teste, média dos 5 folds)
+
+| Experimento | Resultado |
+|---|---|
+| AEID, RF / CNN | F1 0,9958 / 0,9996 (artigo: 0,9957 / 0,9996) |
+| TOW-IDS, RF / CNN | F1 0,8446 / acurácia 0,9942 nos folds 0–3 (artigo: 0,8446 / 0,9962) |
+| SOME/IP CSV, sistema do artigo | AUC 0,679 (RF) e 0,687 (CNN); quase tudo vira "ataque" |
+| M1, janela por conversa (SOME/IP) | AUC 0,810 (RF) e 0,826 (CNN); CNN 6,5× mais rápida |
+| M2, retreino (TOW-IDS) | F1 do RF 0,845 → 0,909; recall do CAN Replay 0,385 → 0,864 |
 
 <a name="getting-started"> </a>
 ## Getting started

@@ -8,3 +8,5 @@ docs/caderno.md
 /retrained
 .DS_Store
 .codex/
+# Overleaf template of the course (kept locally, not part of the code)
+IF848_*
