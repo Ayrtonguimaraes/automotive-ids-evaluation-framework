@@ -176,8 +176,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--rf-test-dir", help="metrics folder of the RF test run (part 1)")
     parser.add_argument("--y-test", help="multiclass labels of the test windows, csv (part 1)")
-    parser.add_argument("--x-train-img", required=True, help="training window images, npz")
-    parser.add_argument("--y-train", required=True, help="multiclass labels of the training windows, csv")
+    parser.add_argument("--x-train-img", help="training window images, npz (parts 2 and 3; without it only part 1 runs)")
+    parser.add_argument("--y-train", help="multiclass labels of the training windows, csv (parts 2 and 3)")
     parser.add_argument("--x-train-sum", help="stored RF training feature, npz (optional check)")
     parser.add_argument("--folds", type=int, default=2)
     parser.add_argument("--jobs", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "4")))
@@ -185,6 +185,8 @@ def main():
 
     if args.rf_test_dir and args.y_test:
         part1(args.rf_test_dir, read_classes(args.y_test))
+    if not args.x_train_img:
+        return
 
     classes = read_classes(args.y_train)
     img = np.load(args.x_train_img)["arr_0"].reshape(-1, WINDOW, COLUMNS)

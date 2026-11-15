@@ -24,5 +24,10 @@ for run, paths in runs.items():
         data = np.load(path)
         proba, y = data["proba"], np.asarray(data["y_true"])
         n_out = proba.shape[1] if proba.ndim == 2 else 1
-        attack = (y.argmax(axis=1) != 4).mean() if y.ndim == 2 and y.shape[1] == 6 else (y.ravel() != 0).mean()
+        # TOW-IDS multiclass: the label is the class number (4 = Normal, alphabetical order of the classes)
+        if n_out == 6:
+            labels = y.argmax(axis=1) if y.ndim == 2 else y.ravel()
+            attack = (labels != 4).mean()
+        else:
+            attack = (y.ravel() != 0).mean()
         print(f"{run:45s} {os.path.basename(path):45s} {len(y):9d} {n_out:7d} {attack:12.3f}")

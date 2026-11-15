@@ -23,12 +23,13 @@ for name, parts in (("RF", rf), ("CNN", cnn)):
     print(f"  first rows y_true {d['y_true'][:3].tolist()}\n  first rows proba {np.round(d['proba'][:3], 3).tolist()}")
 
 n = sum(len(p["index"]) for p in rf)
-rf_y = np.full(n, -1); cnn_y = np.full((n, cnn[0]["y_true"].shape[1]), -1.0)
+rf_y = np.full(n, -1); cnn_y = np.full(n, -1)
 for p in rf:
     rf_y[p["index"]] = np.asarray(p["y_true"]).ravel()
 for p in cnn:
-    cnn_y[p["index"]] = p["y_true"]
+    # The CNN label is the class number (one-hot labels are turned into numbers too)
+    y = np.asarray(p["y_true"])
+    cnn_y[p["index"]] = y.argmax(axis=1) if y.ndim == 2 else y
 print(f"every window has one RF and one CNN prediction: {(rf_y >= 0).all() and (cnn_y >= 0).all()}")
-for col in range(cnn_y.shape[1]):
-    agree = ((cnn_y[:, col] == 1) == (rf_y == 0)).mean()
-    print(f"  CNN label column {col} == 1  <=>  RF label normal: agreement {agree:.4f}")
+for c in range(6):
+    print(f"  CNN class {c} <=> RF normal: agreement {((cnn_y == c) == (rf_y == 0)).mean():.4f}")

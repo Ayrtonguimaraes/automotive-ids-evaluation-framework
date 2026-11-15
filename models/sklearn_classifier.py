@@ -31,8 +31,13 @@ class SklearnClassifier():
         # Rebuild the same pipeline (scaler + classifier) so every fold is trained the same way
         self._model = self.__build_pipeline()
 
-    def train(self, X_data, y_data):
-        self._model = self._model.fit(X_data, y_data)
+    def train(self, X_data, y_data, sample_weight=None):
+        # sample_weight (optional): one weight per training window, given to the classifier only (the scaler
+        # does not use weights). Used by the feedback-loop retraining (tools/feedback_loop.py)
+        if sample_weight is None:
+            self._model = self._model.fit(X_data, y_data)
+        else:
+            self._model = self._model.fit(X_data, y_data, clf__sample_weight=sample_weight)
 
     def predict(self, X_data):
         y_pred = self._model.predict(X_data)

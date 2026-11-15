@@ -29,7 +29,9 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
         self._model_name = model_config_dict["model_name"]
         self._model_config_dict = model_config_dict
         self._metrics_list = []
-        self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_sklearn_train_val"
+        # IDS_RUN_TAG names the run folder of jobs that start together, so they never share a folder
+        run_tag = f"_{os.environ['IDS_RUN_TAG']}" if os.environ.get("IDS_RUN_TAG") else ""
+        self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_sklearn_train_val{run_tag}"
         self._hyperparameters_grid = model_config_dict.get("hyperparams_grid", None)
 
         # Output dir comes from IDS_ARTIFACTS_DIR (default: ./artifacts)
@@ -150,13 +152,23 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
 
         # Train one model per fold, as in the paper's protocol (the test step loads the 5 fold models)
         # Same folds as the paper (StratifiedKFold) unless the config asks for validation by capture (see splits.py)
+        # Optional weight per training window (feedback-loop retraining, tools/feedback_loop.py). Only the
+        # training part of each fold is weighted; the validation metrics are not
+        weights = None
+        if self._model_config_dict.get("sample_weights_path"):
+            weights = np.load(self._model_config_dict["sample_weights_path"])["weight"]
+            if len(weights) != len(y):
+                raise ValueError(f"{len(weights)} sample weights for {len(y)} windows")
+            print(f">> sample weights from {self._model_config_dict['sample_weights_path']}: "
+                  f"mean {weights.mean():.4f}, max {weights.max():.1f}, {(weights != 1).sum()} windows not at 1")
+
         for fold, (train_idx, val_idx) in enumerate(splits.make_folds(y, self._model_config_dict)):
             print('------------fold no---------{}----------------------'.format(fold))
 
             X_train, y_train = X[train_idx], y[train_idx]
             X_val, y_val = X[val_idx], y[val_idx]
 
-            self._model.train(X_train, y_train)
+            self._model.train(X_train, y_train, None if weights is None else weights[train_idx])
 
             train_metrics = self.__validate_model(X_train, y_train)
             self._metrics_list.append(["train", fold, *train_metrics])
