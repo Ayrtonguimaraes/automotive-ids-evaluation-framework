@@ -45,7 +45,9 @@ class PytorchModelTest(abstract_model_test.AbstractModelTest):
         self._confusion_matrix = None
         self._roc_metrics = None
 
-        self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_pytorch_test"
+        # IDS_RUN_TAG names the run folder of jobs that start together, so they never share a folder
+        run_tag = f"_{os.environ['IDS_RUN_TAG']}" if os.environ.get("IDS_RUN_TAG") else ""
+        self._run_id = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_pytorch_test{run_tag}"
 
         # Output dir comes from IDS_ARTIFACTS_DIR (default: ./artifacts)
         # TODO: Get this from json config file

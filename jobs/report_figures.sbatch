@@ -1,6 +1,6 @@
 #!/bin/bash
 # Apuana job: figures and table rows of the report (tools/report_figures.py), from saved test predictions.
-# Finds the feedback_w5 and control_w5 test runs in the logs of jobs/feedback_test.sbatch.
+# Finds the feedback_w5 and control_w5 test runs by their folder names (<timestamp>_sklearn_test_<variant>).
 # Submit from the repository root: sbatch jobs/report_figures.sbatch
 # Then copy ~/outputs/report_figures to the Mac (rsync).
 #SBATCH --job-name=report_figures
@@ -18,9 +18,10 @@ export IDS_ARTIFACTS_DIR="$HOME/outputs"
 export PYTHONUNBUFFERED=1
 
 test_run() {
-    local log
-    log=$(grep -l "sklearn_train_val_$1" logs/feedback_test_*.out 2>/dev/null | tail -1)
-    [ -n "$log" ] && grep "^test run:" "$log" | awk '{print $3 "/metrics"}'
+    # Test folders of the feedback variants carry the variant name (<timestamp>_sklearn_test_<variant>)
+    local dir
+    dir=$(ls -d "$IDS_ARTIFACTS_DIR"/*_sklearn_test_$1 2>/dev/null | sort | tail -1)
+    [ -n "$dir" ] && echo "$dir/metrics"
 }
 FB=$(test_run feedback_w5)
 CT=$(test_run control_w5)

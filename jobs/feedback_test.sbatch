@@ -26,13 +26,11 @@ mkdir -p "retrained/tow_rf_$V"
 for f in 0 1 2 3 4; do
     ln -sfn "$RUN/models/RandomForestClassifier_fold_$f.pkl" "retrained/tow_rf_$V/RandomForestClassifier_fold_$f.pkl"
 done
-START=$(date +%Y_%m_%d_%H_%M_%S)
 echo "=== test (once) ==="
+# The test folder gets the variant in its name, so two tests started in the same second never share it
+export IDS_RUN_TAG="$V"
 $PYTHON execute_model_test.py --model_test_config "config_jsons/feedback/TOW_RandomForest_${V}_test.json"
-TEST=""
-for dir in $(ls -d "$IDS_ARTIFACTS_DIR"/*_sklearn_test | sort); do
-    if [[ "$(basename "$dir")" > "$START" || "$(basename "$dir")" == "$START"* ]]; then TEST="$dir"; break; fi
-done
+TEST=$(ls -d "$IDS_ARTIFACTS_DIR"/*_sklearn_test_$V | sort | tail -1)
 echo "test run: $TEST"
 cat "$TEST"/metrics/*test_metrics*.csv
 echo "=== per attack (Table 9) ==="
