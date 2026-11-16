@@ -8,7 +8,7 @@
 #SBATCH --job-name=feedback_search
 #SBATCH -p short-simple
 #SBATCH --ntasks=1
-#SBATCH -c 16
+#SBATCH -c 2
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
 #SBATCH --output=logs/%x_%A_%a.out
@@ -23,7 +23,8 @@ cd "$HOME/automotive-ids"
 export IDS_ARTIFACTS_DIR="$HOME/outputs"
 export PYTHONUNBUFFERED=1
 set -e
-VARIANTS=(feedback_w2 feedback_w5 feedback_w10 control_w2 control_w5 control_w10)
+# Task 6: errors_w5, the second control (weight on every RF error, without the CNN); run it alone with --array=6
+VARIANTS=(feedback_w2 feedback_w5 feedback_w10 control_w2 control_w5 control_w10 errors_w5)
 V="${VARIANTS[$SLURM_ARRAY_TASK_ID]}"
 # The run folder gets the variant in its name (<timestamp>_sklearn_train_val_<variant>)
 export IDS_RUN_TAG="$V"
