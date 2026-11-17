@@ -24,7 +24,9 @@ export IDS_ARTIFACTS_DIR="$HOME/outputs"
 export PYTHONUNBUFFERED=1
 set -e
 # Task 6: errors_w5, the second control (weight on every RF error, without the CNN); run it alone with --array=6
-VARIANTS=(feedback_w2 feedback_w5 feedback_w10 control_w2 control_w5 control_w10 errors_w5)
+# Tasks 7 and 8: ablations for the Frame Injection diagnosis (weight only on the attack half or only on the
+# normal half of the feedback set); run with --array=7-8
+VARIANTS=(feedback_w2 feedback_w5 feedback_w10 control_w2 control_w5 control_w10 errors_w5 fbattacks_w5 fbnormals_w5)
 V="${VARIANTS[$SLURM_ARRAY_TASK_ID]}"
 # The run folder gets the variant in its name (<timestamp>_sklearn_train_val_<variant>)
 export IDS_RUN_TAG="$V"

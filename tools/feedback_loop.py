@@ -40,7 +40,10 @@ VARIANTS = [f"feedback_w{x}" for x in WEIGHTS] + [f"control_w{x}" for x in WEIGH
 # Second control, added after the test of feedback_w5 (declared in the report): weight 5 on EVERY window the
 # RF got wrong, whether or not the CNN was right. It tells "the CNN's information" apart from plain
 # reweighting of the RF's own errors (boosting-like). Not part of the selection.
-EXTRA_VARIANTS = ["errors_w5"]
+EXTRA_VARIANTS = ["errors_w5", "fbattacks_w5", "fbnormals_w5"]
+# fbattacks_w5 / fbnormals_w5: ablations to explain why Frame Injection drops after the retraining. The
+# feedback set has attack windows the RF missed and normal windows the RF flagged; each ablation gives
+# weight 5 to only one of the two halves. Read on validation only (summarize); not tested, not selected.
 CLASSES = ["C_D", "C_R", "F_I", "M_F", "Normal", "P_I"]   # order of the one-hot encoder (alphabetical)
 NORMAL = 4
 TIE = 0.002
@@ -97,6 +100,8 @@ def weights(args):
         np.savez(f"{args.out}/weights_control_w{x}.npz", weight=control)
         if x == 5:
             np.savez(f"{args.out}/weights_errors_w{x}.npz", weight=np.where(rf_wrong, float(x), 1.0))
+            np.savez(f"{args.out}/weights_fbattacks_w{x}.npz", weight=np.where(fb & (rf_y == 1), float(x), 1.0))
+            np.savez(f"{args.out}/weights_fbnormals_w{x}.npz", weight=np.where(fb & (rf_y == 0), float(x), 1.0))
         print(f"w={x}: feedback total weight {w.sum():.0f}, control total weight {control.sum():.0f} "
               f"(control weight normal {control[rf_y == 0][0]:.4f}, attack {control[rf_y == 1][0]:.4f})")
 
