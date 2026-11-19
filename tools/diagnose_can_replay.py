@@ -48,6 +48,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def read_classes(csv_path):
+    """Class name of each window (C_D, C_R, F_I, M_F, Normal, P_I) from the multiclass label csv."""
     return pd.read_csv(csv_path)["Class"].astype(str).values
 
 
@@ -58,6 +59,8 @@ def recall_at_fpr(p, is_normal, mask, fpr):
 
 
 def part1(rf_dir, classes):
+    """Part 1 (test set): attack probability of the RF per attack class, mean of the fold models, to see
+    whether the missed CAN Replay windows are confident errors or close to the threshold."""
     print("\n=== PART 1: retrained RF on the TEST set, per attack (mean of the folds) ===")
     paths = {}
     for path in glob.glob(os.path.join(os.path.expanduser(rf_dir), "*test_proba*RandomForestClassifier*.npz")):
@@ -119,6 +122,8 @@ def summaries(img):
 
 
 def part2(sum_true, classes, x_sum_path):
+    """Part 2 (training set): how often the column sum of a window overflows 255 (the RF feature is
+    stored in 8 bits, so it wraps around), per class and on the CAN columns."""
     print("\n=== PART 2: overflow of the window sum, TRAINING set ===")
     if x_sum_path:
         stored = np.load(x_sum_path)["arr_0"][:20000]
@@ -138,6 +143,8 @@ def part2(sum_true, classes, x_sum_path):
 
 
 def part3(families, classes, n_folds, jobs):
+    """Part 3 (training set): first probe of other window summaries for the RF, validated by contiguous
+    blocks so overlapping windows do not leak between training and validation."""
     print("\n=== PART 3: first probe of new summaries, TRAINING set, validation by contiguous blocks ===")
     n = len(classes)
     y = (classes != NORMAL).astype(int)
@@ -173,6 +180,8 @@ def part3(families, classes, n_folds, jobs):
 
 
 def main():
+    """Command line: run part 1 when the test files are given, and parts 2 and 3 when the training
+    images are given."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--rf-test-dir", help="metrics folder of the RF test run (part 1)")
     parser.add_argument("--y-test", help="multiclass labels of the test windows, csv (part 1)")

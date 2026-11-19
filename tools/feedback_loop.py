@@ -43,7 +43,8 @@ VARIANTS = [f"feedback_w{x}" for x in WEIGHTS] + [f"control_w{x}" for x in WEIGH
 EXTRA_VARIANTS = ["errors_w5", "fbattacks_w5", "fbnormals_w5"]
 # fbattacks_w5 / fbnormals_w5: ablations to explain why Frame Injection drops after the retraining. The
 # feedback set has attack windows the RF missed and normal windows the RF flagged; each ablation gives
-# weight 5 to only one of the two halves. Read on validation only (summarize); not tested, not selected.
+# weight 5 to only one of the two halves. Read on validation (summarize) and not selected; fbattacks_w5 was
+# then tested once, declared in the report as an exploratory result. The official variant stays feedback_w5.
 CLASSES = ["C_D", "C_R", "F_I", "M_F", "Normal", "P_I"]   # order of the one-hot encoder (alphabetical)
 NORMAL = 4
 TIE = 0.002
@@ -52,6 +53,9 @@ WEIGHTS_DIR = "data/tow/feedback"
 
 
 def by_index(paths, n=None):
+    """Join the out-of-fold files of the 5 folds into one array per training window, in the original
+    window order. Returns the labels (class index; one-hot labels are turned into their argmax) and the
+    predicted probabilities. Stops if any window has no out-of-fold prediction."""
     parts = [np.load(p) for p in paths]
     n = n or sum(len(p["index"]) for p in parts)
     y, proba = None, None
@@ -68,6 +72,9 @@ def by_index(paths, n=None):
 
 
 def weights(args):
+    """Subcommand "weights": mark the training windows where the RF was wrong and the CNN was right
+    (out-of-fold, CNN ties excluded) and write one weights file per variant: feedback_wX, control_wX
+    and, for weight 5, the second control (errors_w5) and the two ablations (fbattacks_w5, fbnormals_w5)."""
     rf_y, rf_p = by_index(sorted(glob.glob(f"{args.rf_run}/metrics/oof_proba_*_fold_*.npz")))
     cnn_paths = [glob.glob(f"{run}/metrics/oof_proba_*_fold_*.npz")[0] for run in args.cnn_runs]
     cls, cnn_p = by_index(cnn_paths, len(rf_y))
@@ -107,6 +114,8 @@ def weights(args):
 
 
 def configs(_):
+    """Subcommand "configs": write the training config (the paper's TOW-IDS RF plus sample_weights_path)
+    and the test config (the 5 retrained fold models) of every variant."""
     train = json.load(open("config_jsons/model_train_validate/TOW_RandomForest.json"))
     test = json.load(open("config_jsons/model_test/TOW_RandomForest_test.json"))
     os.makedirs(CONFIGS, exist_ok=True)
@@ -122,6 +131,8 @@ def configs(_):
 
 
 def val_row(paths, cls):
+    """Validation metrics of one training run, one row per fold: AUC, F1, recall, false positive rate,
+    and the recall of CAN Replay (class 1) and Frame Injection (class 2), all with threshold 0.5."""
     rows = []
     for p in sorted(paths):
         d = np.load(p)
@@ -134,6 +145,9 @@ def val_row(paths, cls):
 
 
 def summarize(args):
+    """Subcommand "summarize": validation table of the paper's RF and of every variant found, and the
+    selection rule fixed before the test (highest mean F1 among feedback_wX; ties within 0.002 go to the
+    smaller weight)."""
     info = np.load(f"{args.weights_dir}/windows.npz")
     cls = info["cls"]
     runs = {"baseline (paper)": args.baseline_run}
@@ -162,6 +176,7 @@ def summarize(args):
 
 
 def main():
+    """Command line: dispatch to the weights, configs or summarize subcommand."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("weights")

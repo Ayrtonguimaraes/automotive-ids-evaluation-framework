@@ -53,6 +53,7 @@ def save(fig, out, name):
 
 
 def fold_of(path):
+    """Fold number written in a file name (..._fold_<n>...)."""
     return int(re.search(r"fold_(\d+)", os.path.basename(path)).group(1))
 
 
@@ -74,6 +75,8 @@ def load_run(metrics_dir):
 
 
 def find_earliest(outputs, kind, n, n_outputs):
+    """Earliest test run of the given kind with n test windows and n_outputs outputs: the paper's
+    models, tested before the feedback variants."""
     for run in sorted(glob.glob(f"{outputs}/*_{kind}")):
         files = glob.glob(f"{run}/metrics/*test_proba*fold_0*.npz")
         if not files:
@@ -91,6 +94,8 @@ def binary_scores(proba):
 
 
 def binary_metrics(folds, multiclass=False):
+    """Accuracy, precision, recall, F1 and ROC-AUC of each fold model. Multiclass (TOW-IDS CNN):
+    accuracy from the predicted class, macro precision, recall and F1, and the AUC of attack x normal."""
     rows = []
     for proba, y in folds:
         if multiclass:
@@ -106,6 +111,7 @@ def binary_metrics(folds, multiclass=False):
 
 
 def table_rows(runs):
+    """Print the rows of Tables 7 and 8 (mean ± std over the 5 fold models), ready for LaTeX."""
     print("\nTables 7 and 8 (test, mean ± std over the 5 fold models): accuracy, precision, recall, F1, ROC-AUC")
     print("TOW-IDS CNN: accuracy from the predicted class; precision, recall and F1 macro over the 6 classes;"
           " ROC-AUC of attack x normal with score 1 - P(Normal)")
@@ -118,6 +124,7 @@ def table_rows(runs):
 
 
 def plot_matrix(ax, cm, labels, title):
+    """Draw one confusion matrix: the color is the share of the row, the text the mean count."""
     share = cm / cm.sum(axis=1, keepdims=True)
     ax.imshow(share, cmap=matplotlib.colors.LinearSegmentedColormap.from_list("b", ["#f4f8fd", "#86b6ef", "#184f95"]),
               vmin=0, vmax=1)
@@ -136,6 +143,8 @@ def plot_matrix(ax, cm, labels, title):
 
 
 def fig8(runs, out):
+    """Fig. 8 of the paper with our models: confusion matrices of both stages on AEID and TOW-IDS, with
+    the TOW-IDS CNN split into folds 0-3 and fold 4."""
     def mean_cm(folds, labels, multi):
         cms = []
         for proba, y in folds:
@@ -161,6 +170,7 @@ def fig8(runs, out):
 
 
 def fig9(runs, out):
+    """Fig. 9 of the paper with our models: ROC curves of both stages, one thin line per fold."""
     fig, axes = plt.subplots(1, 2, figsize=(7.16, 2.9))
     for ax, ds, title in zip(axes, ("aeid", "tow"), ("(a) AEID", "(b) TOW-IDS")):
         for key, color, name in ((f"{ds}_rf", BLUE, "Estágio 1 (RF)"), (f"{ds}_cnn", ORANGE, "Estágio 2 (CNN)")):
@@ -182,6 +192,7 @@ def fig9(runs, out):
 
 
 def fig_window_search(outputs, out):
+    """Validation AUC per window size, arrival order x per conversation, for the RF and the CNN."""
     rows = []
     for grouping in ("arrival", "conversation"):
         for w in (10, 20, 30, 44):
@@ -213,6 +224,8 @@ def fig_window_search(outputs, out):
 
 
 def fig_feedback(base, feedback, control, out):
+    """Test recall per attack and false positive rate of the paper's RF, the control and the
+    retraining (weight 5); also prints the numbers."""
     classes = pd.read_csv(MULTI)["Class"].astype(str).values
     attacks = ["C_D", "C_R", "F_I", "M_F", "P_I"]
     series = [("RF do artigo", base, INK2), ("Controle (peso 5)", control, BLUE), ("Retreino (peso 5)", feedback, ORANGE)]
@@ -295,6 +308,7 @@ def fig_time(out):
 
 
 def main():
+    """Find the test runs of the paper's models, print the table rows and write every figure."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True)
     parser.add_argument("--outputs", default=os.environ.get("IDS_ARTIFACTS_DIR", os.path.expanduser("~/outputs")))

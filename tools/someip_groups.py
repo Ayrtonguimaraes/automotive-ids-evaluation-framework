@@ -39,6 +39,9 @@ def capture_index(x_path):
 
 
 def main():
+    """Write the groups file of the SOME/IP pickles: the capture and attack folder of every window, in the
+    same order as the feature generator, so whole captures go to one validation fold (splits.py). The
+    window count is checked against the labels before anything is written."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--split", choices=["train", "test"], required=True)
     parser.add_argument("--dataset", required=True, help="folder with one subfolder per attack")

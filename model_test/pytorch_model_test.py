@@ -212,6 +212,7 @@ class PytorchModelTest(abstract_model_test.AbstractModelTest):
                 self._roc_metrics = roc_metrics.cpu().numpy()
 
             # TODO: Get the data format using the data
+            # Dummy input with the image size of this model (window_size x 116; 44 x 116 in the paper)
             rows, columns = getattr(self._model, "input_shape", (44, 116))
             dummy_input = torch.randn(64, 1, rows, columns, dtype=torch.float).to(device)
             if device.type == "cpu":

@@ -40,6 +40,7 @@ def find_fold_files(directory, pattern):
 
 
 def load_rf(path):
+    """Read one RF test probability file: attack probability and binary label per window."""
     data = np.load(path)
     return data["proba"][:, 1].astype(np.float64), np.asarray(data["y_true"]).ravel().astype(int)
 
@@ -56,6 +57,7 @@ def load_cnn(path, n_outputs):
 
 
 def evaluate(y, pred):
+    """Confusion counts and accuracy, precision, recall and F1 of binary predictions (attack = 1)."""
     tp = int(np.sum((pred == 1) & (y == 1)))
     fp = int(np.sum((pred == 1) & (y == 0)))
     fn = int(np.sum((pred == 0) & (y == 1)))
@@ -118,6 +120,7 @@ def main():
     means = [(t_low, t_high, table[(table[:, 1] == t_low) & (table[:, 2] == t_high)].mean(axis=0)) for t_low, t_high in pairs]
 
     def show(label, t_low, t_high, m):
+        """Print one operating point of the cascade (thresholds, share sent to the CNN, metrics, time)."""
         print(f"{label:>22}: t_low={t_low:<5} t_high={t_high:<5} to_cnn={m[3]:.3f} "
               f"recall={m[10]:.4f} prec={m[9]:.4f} f1={m[11]:.4f} fp={m[5]:.0f} fn={m[6]:.0f} time={m[12]:.0f}")
 

@@ -30,6 +30,10 @@ PURGE = 45
 
 
 def purged_block_folds(file_ids, pos, purge=PURGE):
+    """Purged block k-fold. Each file is cut into N_SPLITS contiguous blocks of windows (by position);
+    fold k validates on block k of every file and trains on the rest of the file, except the windows
+    less than `purge` positions away from the validation block, which share a message with it and are
+    dropped. Returns a list of (train_idx, val_idx)."""
     folds = [([], []) for _ in range(N_SPLITS)]
     for f in np.unique(file_ids):
         idx = np.flatnonzero(file_ids == f)

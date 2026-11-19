@@ -24,11 +24,14 @@ CLASSES = ["C_D", "C_R", "F_I", "M_F", "Normal", "P_I"]
 
 
 def test_proba(folder):
+    """Attack probability of each test window from the RF fold models of one test run: the mean over
+    the folds and the list with one array per fold."""
     paths = sorted(glob.glob(f"{folder}/*test_proba*.npz"), key=lambda p: int(re.search(r"fold_(\d+)", p).group(1)))
     return np.mean([np.load(p)["proba"][:, 1] for p in paths], axis=0), [np.load(p)["proba"][:, 1] for p in paths]
 
 
 def oof(run, n):
+    """Out-of-fold attack probability of every training window of one RF training run (NaN if missing)."""
     p = np.full(n, np.nan)
     for path in glob.glob(f"{run}/metrics/oof_proba_*_fold_*.npz"):
         d = np.load(path)
@@ -37,6 +40,9 @@ def oof(run, n):
 
 
 def main():
+    """Diagnosis of the Frame Injection drop after the retraining: (1) probability per class on the test
+    set, paper RF x retrained RF; (2) threshold sweep of the retrained RF; (3) on the training set, how
+    the out-of-fold prediction of each group of windows moved."""
     a = argparse.ArgumentParser()
     for k in ("base-test", "feedback-test", "y-test", "weights-dir", "base-run", "feedback-run"):
         a.add_argument(f"--{k}", required=True)

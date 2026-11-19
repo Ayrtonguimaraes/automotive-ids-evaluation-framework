@@ -31,6 +31,9 @@ def metrics_as_in_the_test_code(proba, one_hot):
 
 
 def main(directory):
+    """For each fold of the TOW-IDS CNN test, compare the metrics computed from the predicted class
+    (confusion matrix) with the ones the authors' test code reports, and show the output ties and the
+    mean outputs on CAN Replay (how fold 4 fails)."""
     paths = {int(re.search(r"fold_(\d+)", p).group(1)): p for p in glob.glob(os.path.join(os.path.expanduser(directory), "test_proba*.npz"))}
     for fold, path in sorted(paths.items()):
         data = np.load(path)

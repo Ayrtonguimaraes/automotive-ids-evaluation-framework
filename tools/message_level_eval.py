@@ -51,6 +51,7 @@ def windows(csv_paths, grouping, w):
 
 
 def load_proba(folder):
+    """Attack probability and label of each test window, one pair per fold model, from one test run."""
     paths = sorted(glob.glob(f"{folder}/*test_proba*.npz"), key=lambda p: int(re.search(r"fold_(\d+)", p).group(1)))
     out = []
     for p in paths:
@@ -62,6 +63,7 @@ def load_proba(folder):
 
 
 def find_run(outputs, kind, n_windows):
+    """Latest test run of the given kind whose test set has exactly n_windows windows."""
     for run in sorted(glob.glob(f"{outputs}/*_{kind}"), reverse=True):
         files = glob.glob(f"{run}/metrics/*test_proba*fold_0*.npz")
         if files and len(np.load(files[0])["y_true"]) == n_windows:
@@ -84,6 +86,7 @@ def message_scores(covers, proba, n_messages, how="max"):
 
 
 def summary(y, s):
+    """AUC, recall, specificity and balanced accuracy of message scores (threshold 0.5)."""
     pred = s >= 0.5
     rec, spec = pred[y == 1].mean(), 1 - pred[y == 0].mean()
     return roc_auc_score(y, s), rec, spec, (rec + spec) / 2

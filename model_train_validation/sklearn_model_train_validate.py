@@ -175,7 +175,8 @@ class SklearnModelTrainValidation(abstract_model_train_validate.AbstractModelTra
             val_metrics = self.__validate_model(X_val, y_val)
             self._metrics_list.append(["validation", fold, *val_metrics])
 
-            # Out-of-fold attack probabilities, used to choose the cascade thresholds without touching the test set
+            # Out-of-fold attack probabilities (each window predicted by the model that did not train on it), used by the
+            # feedback-loop retraining (tools/feedback_loop.py) and the cascade analysis, without touching the test set
             np.savez(f"{self._metrics_output_path}/oof_proba_{self._model_name}_fold_{fold}.npz",
                      index=val_idx, y_true=y_val, proba=self._model.predict_proba(X_val))
 

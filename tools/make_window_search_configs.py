@@ -22,14 +22,17 @@ OUT = "config_jsons/window_search"
 
 
 def variants():
+    """Every (grouping, window size) pair of the search."""
     return [(g, w) for g in GROUPINGS for w in WINDOWS]
 
 
 def name(grouping, window):
+    """Name of one variant, e.g. conversation_w10."""
     return f"{grouping}_w{window}"
 
 
 def feat_config(grouping, window, sum_x, split="train"):
+    """Feature generator config of one variant (SOME/IP CSV, binary labels)."""
     return {
         "window_size": window, "window_slide": 1, "number_of_bytes": 58, "multiclass": False,
         "labeling_schema": "SOMEIP_dataset", "dataset": "SOMEIP_CSV_dataset",
@@ -38,10 +41,12 @@ def feat_config(grouping, window, sum_x, split="train"):
 
 
 def data_dir(grouping, window):
+    """Folder where the features of one variant are written."""
     return f"data/someip_csv/window_search/{name(grouping, window)}"
 
 
 def features_file(kind, grouping, window, sum_x, split="train"):
+    """Path of a features file (X or y) written by the feature generator for one variant."""
     return (f"{data_dir(grouping, window)}/{kind}_{split}_SOMEIP_dataset_Wsize_{window}_Cols_116_Wslide_1"
             f"_MC_False_sumX_{sum_x}.npz")
 
@@ -97,6 +102,8 @@ def write_test_configs(variant):
 
 
 def main():
+    """Write the feature generation and CNN configs of every variant of the window search, or, with
+    --test, the test configs of the selected variant."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", help="write the test configs of one selected variant, e.g. conversation_w10")
     args = parser.parse_args()
